@@ -124,18 +124,32 @@ void ParticleFilter::Update(const vector<float>& ranges,
   // observations for each particle, and assign weights to the particles based
   // on the observation likelihood computed by relating the observation to the
   // predicted point cloud.
+
+  // here we will use obersvation likelihood model to update weights
+  // for each ray from laser:
+  //      determine s_t_i for p_ptr based on distance from car to 
+  //            predicted intersection with wall
+  //      calculate p(s_t_i|x_t) {where x_t == next_particles_?} by 
+  //            proportional_to {ignore s_t_i < s_min ||J s_t_i > s_max
+  //                             exp(.),
+  //                             exp(.),
+  //                             exp(.)}
+  // find p(s_t|x) "probability of observing laser points given predicted location"
+  //        using product of all p(s_t_i | x_t)s "inidividual probabilities of each ray"
+  // update weight of p_ptr to be p_ptr.weight * p(s_t|x);
+
 }
 
 void ParticleFilter::Resample() {
+  // create new_particles;
   // Resample the particles, proportional to their weights.
-  // The current particles are in the `particles_` variable. 
-  // Create a variable to store the new particles, and when done, replace the
-  // old set of particles:
-  // vector<Particle> new_particles';
-  // During resampling: 
-  //    new_particles.push_back(...)
-  // After resampling:
-  // particles_ = new_particles;
+  // caculate total_sum of all weights in particles
+  // create bins with width  = weight / total_sum
+  // for each particle in particles (i = 1 to num_particles):
+  //      randomly generate number 0 - 1;
+  //      determine which bin that falls into -> bin_i
+  //      new_particles.push_back(particles_[bin_i])
+  // particles = new_particles;
 
   // You will need to use the uniform random number generator provided. For
   // example, to generate a random number between 0 and 1:
@@ -150,7 +164,10 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_min,
                                   float angle_max) {
   // A new laser scan observation is available (in the laser frame)
+  
   // Call the Update and Resample steps as necessary.
+  // for each particle p in partcles_ -> Update(ranges, range_min, range_max, angle_min, angle_max, p);
+  // Resample();
 }
 
 void ParticleFilter::Predict(const Vector2f& odom_loc,
@@ -159,6 +176,18 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // A new odometry value is available (in the odom frame)
   // Implement the motion model predict step here, to propagate the particles
   // forward based on odometry.
+
+  // here we will use motion model to predict location of particle at next time step
+  // start with n particles_ with position (px,py)
+  // split particles into 4 groups for each error term (tet, ter, ret, rer)
+  //     or apply each type of error for all particles
+  // how do we represent/calculate tet, ter, ret, rer 
+  //     (test with all errors = 0, or individually each error type)
+  // predict location loc_hat and angle_hat of particles at next time step given odom velocity (given odom_location/angle) + error noise
+  //     and store in new data structure?  next_particles_
+  // return how likely it is for each particle to be at the next location loc_hat, angle_hat
+  //     based on 1) starting location, 2) predicted location, 3) odometry
+
 
 
   // You will need to use the Gaussian random number generator provided. For
@@ -176,6 +205,14 @@ void ParticleFilter::Initialize(const string& map_file,
   // was received from the log. Initialize the particles accordingly, e.g. with
   // some distribution around the provided location and angle.
   map_.Load(map_file);
+
+  //initialize a vector of particles in the form
+  // partcles_ of size num_particles = something
+  // normally distributed locations ie. float x, y = loc + rng_.Gaussian(mean, stddev);
+  // normally distirbuted angles ie. float ang = angle + rng_.Gaussian(mean, stddev);
+  // weights = 1;
+
+  // 
 }
 
 void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr, 
