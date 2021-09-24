@@ -316,9 +316,12 @@ void ParticleFilter::Initialize(const string& map_file,
 
   // Create randomly distributed particles around (init_x, init_y).
   for (int i = 0; i < int(particles_.size()); i++){
-    float x = rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
-    float y = rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
-    float r = rng_.Gaussian(angle, CONFIG_init_r_stddev);
+    //float x = //rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
+    //float y = //rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
+    //float r = //rng_.Gaussian(angle, CONFIG_init_r_stddev);
+    float x = loc.x();
+    float y = loc.y();
+    float r = angle;
     particles_[i].loc = Vector2f(x, y);
     particles_[i].angle = r;
     particles_[i].weight = 1.0;

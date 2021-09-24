@@ -20,7 +20,7 @@ class Particle {
         double normalize_weight(double normalize_by);
 
         //Functions to calculate the different types of error
-        Eigen::Vector2f trans_err_trans(float_t speed, double del_time, util_random::Random rng, float_t k1);
+        Eigen::Vector2f trans_err_trans(float_t speed, double del_time, util_random::Random& rng, float_t k1);
         Eigen::Vector2f trans_err_rot(float_t ang_vel, double del_time);
         float_t rot_err_rot(float_t std_dev);
         float_t rot_err_trans(float_t std_dev);
