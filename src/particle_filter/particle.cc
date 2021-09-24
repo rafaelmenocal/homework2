@@ -1,8 +1,10 @@
 #include "particle.h"
 
     //Functions to change this function's location and angle
-    Eigen::Vector2f Particle::get_del_loc(Eigen::Vector2f vel, double del_time) {
-        float_t result = loc + (vel * del_time);
+    Eigen::Vector2f Particle::get_del_loc(float_t speed, double del_time) {
+        Eigen::Vector2f vel = Eigen::Vector2f(cos(angle) * speed, sin(angle) * speed);
+        Eigen::Vector2f result = loc + (vel * del_time);
+        return result;
     }
 
     float_t Particle::get_del_angle(float_t ang_vel, double del_time) {
