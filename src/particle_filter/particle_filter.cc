@@ -215,14 +215,8 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   // Resample();
 }
 
-void ParticleFilter::Predict(const Vector2f& odom_loc,
-                             const float odom_angle) {
-  // Implement the predict step of the particle filter here.
-  // A new odometry value is available (in the odom frame)
-  // Implement the motion model predict step here, to propagate the particles
-  // forward based on odometry.
-
-  // If odometry has not been initialized, we can't do anything.
+void ParticleFilter::UpdateOdometry(const Vector2f& odom_loc,
+                                    const float odom_angle){
   if (!odom_initialized_) {
     curr_odom_angle_ = odom_angle;
     curr_odom_loc_ = odom_loc;
@@ -232,11 +226,9 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
 
   prev_odom_loc_ = odom_loc;
   prev_odom_angle_ = odom_angle;
-
   curr_odom_loc_ = odom_loc;
   curr_odom_angle_ = odom_angle;
   curr_time_ = ros::Time::now().toSec();
-
   del_time_ = curr_time_ - prev_time_;
   prev_odom_vel2f_ = odom_vel2f_;
   odom_vel2f_ = GetOdomVel2f(prev_odom_loc_, curr_odom_loc_, del_time_);
@@ -245,8 +237,17 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   odom_accel_ = Accel2f_To_Accel(odom_accel2f_);
   del_odom_angle_ = curr_odom_angle_ - prev_odom_angle_;
   odom_omega_ = del_odom_angle_ / del_time_;
+  prev_time_ = curr_time_;                  
+}
 
-  prev_time_ = curr_time_;
+void ParticleFilter::Predict(const Vector2f& odom_loc,
+                             const float odom_angle) {
+  // Implement the predict step of the particle filter here.
+  // A new odometry value is available (in the odom frame)
+  // Implement the motion model predict step here, to propagate the particles
+  // forward based on odometry.
+
+  UpdateOdometry(odom_loc, odom_angle);
 
   // here we will use motion model to predict location of particle at next time step
   // start with n particles_ with position (px,py)

@@ -60,6 +60,10 @@ class ParticleFilter {
                   const Eigen::Vector2f& loc,
                   const float angle);
 
+  // Called to update variables based on odometry
+  void UpdateOdometry(const Eigen::Vector2f& odom_loc,
+                                      const float odom_angle);
+
   // Return the list of particles.
   void GetParticles(std::vector<Particle>* particles) const;
 
