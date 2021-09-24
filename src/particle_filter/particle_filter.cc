@@ -48,7 +48,7 @@ using Eigen::Vector2f;
 using Eigen::Vector2i;
 using vector_map::VectorMap;
 
-DEFINE_double(num_particles, 50, "Number of particles");
+DEFINE_double(num_particles, 100, "Number of particles");
 double current_time;
 
 namespace particle_filter {
@@ -284,22 +284,14 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
 
   for (auto& particle : particles_){
     Eigen::Vector2f tet = particle.trans_err_trans(odom_vel_, del_time_, rng_, CONFIG_k1);
-    particle.loc += odom_vel_ * del_time_ * Vector2f(cos(particle.angle), sin(particle.angle)) + tet;
+    Eigen::Vector2f ter = particle.trans_err_rot(odom_omega_, del_time_, rng_, CONFIG_k1);
+    float_t rer = particle.rot_err_rot(odom_omega_, del_time_, rng_, CONFIG_k3);
+    float_t ret = particle.rot_err_rot(odom_vel_, del_time_, rng_, CONFIG_k4);
+
+    particle.loc += odom_vel_ * del_time_ * Vector2f(cos(particle.angle), sin(particle.angle)) + tet + ter;
+    particle.angle += odom_omega_ * del_time_ + ret + rer;
   }
 
-  // You will need to use the Gaussian random number generator provided. For
-  // example, to generate a random number from a Gaussian with mean 0, and
-  // standard deviation 2:
-  // float k1 = CONFIG_k1;
-  // float k2 = CONFIG_k2;
-  // float k3 = CONFIG_k3;
-  // float k4 = CONFIG_k4;
-
-  // PrintParticles(particles_);
-
-  // float x = rng_.Gaussian(0.0, 2.0);
-  // printf("Random number drawn from Gaussian distribution with 0 mean and "
-  //        "standard deviation of 2 : %f\n", x);
 }
 
 
@@ -316,12 +308,10 @@ void ParticleFilter::Initialize(const string& map_file,
 
   // Create randomly distributed particles around (init_x, init_y).
   for (int i = 0; i < int(particles_.size()); i++){
-    //float x = //rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
-    //float y = //rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
-    //float r = //rng_.Gaussian(angle, CONFIG_init_r_stddev);
-    float x = loc.x();
-    float y = loc.y();
-    float r = angle;
+    float x = rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
+    float y = rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
+    float r = rng_.Gaussian(angle, CONFIG_init_r_stddev);
+
     particles_[i].loc = Vector2f(x, y);
     particles_[i].angle = r;
     particles_[i].weight = 1.0;
