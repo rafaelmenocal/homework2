@@ -8,8 +8,9 @@ class Particle {
     double weight;
 
     //Functions to change this function's location and angle
-    Eigen::Vector2f get_del_loc(float_t speed, double del_time);
-    float_t get_del_angle(float_t ang_vel, double del_time);
+    Particle::update_position(float_t speed, double del_time, float_t ang_vel);
+    Eigen::Vector2f get_del_loc(float_t speed, double del_time, float_t ang_vel);
+    float_t get_del_angle(float_t speed, double del_time, float_t ang_vel);
 
     //Functions to edit the weight
     double calc_weight();
