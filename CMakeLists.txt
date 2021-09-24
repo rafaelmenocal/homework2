@@ -46,7 +46,8 @@ TARGET_LINK_LIBRARIES(slam shared_library ${libs})
 
 ROSBUILD_ADD_EXECUTABLE(particle_filter
                         src/particle_filter/particle_filter_main.cc
-                        src/particle_filter/particle_filter.cc)
+                        src/particle_filter/particle_filter.cc
+                        src/particle_filter/particle.cc)
 TARGET_LINK_LIBRARIES(particle_filter shared_library ${libs})
 
 ROSBUILD_ADD_EXECUTABLE(navigation

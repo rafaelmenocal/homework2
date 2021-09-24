@@ -33,9 +33,7 @@
 
     Eigen::Vector2f Particle::trans_err_trans(
         float_t speed, double del_time, util_random::Random rng, float_t k1) {
-        double del_trans = speed * del_time;
-        double result = rng.Gaussian(0, del_trans * k1);
-        return Eigen::Vector2f(cos(angle), sin(angle)) * result;
+        return Eigen::Vector2f(0, 0);
     }
 
     Eigen::Vector2f Particle::trans_err_rot(float_t ang_vel, double del_time) {
