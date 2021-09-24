@@ -31,14 +31,15 @@
         weight /= normalize_by; //Now, how we get the value to normalize by, I'm not sure
     }
 
-    Eigen::Vector2f Particle::trans_err_trans(float_t speed, double del_time) {
+    Eigen::Vector2f Particle::trans_err_trans(
+        float_t speed, double del_time, util_random::Random rng, float_t k1) {
         double del_trans = speed * del_time;
-        double result = gaussian(0, del_trans * k1);
+        double result = rng.Gaussian(0, del_trans * k1);
         return Eigen::Vector2f(cos(angle), sin(angle)) * result;
     }
 
     Eigen::Vector2f Particle::trans_err_rot(float_t ang_vel, double del_time) {
-        return 0; //EDIT THIS
+        return Eigen::Vector2f(0, 0); //EDIT THIS
     }
 
     float_t Particle::rot_err_rot(float_t std_dev) {

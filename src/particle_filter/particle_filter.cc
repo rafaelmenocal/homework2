@@ -283,7 +283,7 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   //     based on 1) starting location, 2) predicted location, 3) odometry
 
   for (auto& particle : particles_){
-    Eigen::Vector2f tet = particle.trans_err_trans(odom_vel_, del_time_);
+    Eigen::Vector2f tet = particle.trans_err_trans(odom_vel_, del_time_, rng_, CONFIG_k1);
     particle.loc += odom_vel_ * del_time_ * Vector2f(cos(particle.angle), sin(particle.angle)) + tet;
   }
 
