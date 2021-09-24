@@ -81,7 +81,7 @@ float Accel2f_To_Accel(const Vector2f& accel) {
 }
 
 Vector2f GetOdomVel2f(const Vector2f& last_loc, const Vector2f& current_loc, float del_time) {
-  return (1 / del_time) * Vector2f(current_loc.x() - last_loc.x(), current_loc.y() - last_loc.y());
+  return Vector2f(current_loc.x() - last_loc.x(), current_loc.y() - last_loc.y());
 }
 
 Vector2f GetOdomAccel2f(const Vector2f& last_vel, const Vector2f& current_vel, float del_time) {
@@ -143,7 +143,7 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     // You can create a new line segment instance as follows, for :
     line2f my_line(1, 2, 3, 4); // Line segment from (1,2) to (3.4).
     // Access the end points using `.p0` and `.p1` members:
-    ROS_INFO("P0: (%f, %f), P1: (%f, %f)", my_line.p0.x(), my_line.p0.y(), my_line.p1.x(), my_line.p1.y());
+    //ROS_INFO("P0: (%f, %f), P1: (%f, %f)", my_line.p0.x(), my_line.p0.y(), my_line.p1.x(), my_line.p1.y());
     // Check for intersections:
     bool intersects = map_line.Intersects(my_line);
     // You can also simultaneously check for intersection, and return the point
@@ -151,9 +151,9 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     Vector2f intersection_point; // Return variable
     intersects = map_line.Intersection(my_line, &intersection_point);
     if (intersects) {
-      ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
+      //ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
     } else {
-      ROS_INFO("No intersection");
+      //ROS_INFO("No intersection");
     }
   }
 }
@@ -224,14 +224,18 @@ void ParticleFilter::UpdateOdometry(const Vector2f& odom_loc,
     return;
   }
 
-  prev_odom_loc_ = odom_loc;
-  prev_odom_angle_ = odom_angle;
+  prev_odom_loc_ = curr_odom_loc_;
+  prev_odom_angle_ = curr_odom_angle_;
   curr_odom_loc_ = odom_loc;
   curr_odom_angle_ = odom_angle;
   curr_time_ = ros::Time::now().toSec();
   del_time_ = curr_time_ - prev_time_;
   prev_odom_vel2f_ = odom_vel2f_;
   odom_vel2f_ = GetOdomVel2f(prev_odom_loc_, curr_odom_loc_, del_time_);
+  ROS_INFO("PREV %f %f", prev_odom_loc_.x(), prev_odom_loc_.y());
+  ROS_INFO("CURR %f %f", curr_odom_loc_.x(), curr_odom_loc_.y());
+  ROS_INFO("ODOM %f %f", odom_vel2f_.x(), odom_vel2f_.y());
+
   odom_accel2f_ = GetOdomAccel2f(prev_odom_vel2f_, odom_vel2f_, del_time_);
   odom_vel_ = Vel2f_To_Vel(odom_vel2f_);
   odom_accel_ = Accel2f_To_Accel(odom_accel2f_);
@@ -259,19 +263,16 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   //     and store in new data structure?  next_particles_
   // return how likely it is for each particle to be at the next location loc_hat, angle_hat
   //     based on 1) starting location, 2) predicted location, 3) odometry
-  
-  // for (int i = 0; i < int(particles_.size()); i++){
-  //   float trans_err_trans = 0.0;
-  //   float trans_err_rot = 0.0;
-  //   float rot_err_trans = 0.0;
-  //   float rot_err_rot = 0.0;
 
-
-  //   float del_trans = 
-  //   particles_[i].loc = Vector2f(x, y);
-  //   particles_[i].angle = r;
-  //   particles_[i].weight = 1.0;
-  // }
+  for (for auto& particle : particles_){
+    // float trans_err_trans = 0.0;
+    // float trans_err_rot = 0.0;
+    // float rot_err_trans = 0.0;
+    // float rot_err_rot = 0.0;
+    particles_[i].loc.x() += odom_vel_;
+    //particles_[i].angle = r;
+    particles_[i].weight = 1.0;
+  }
 
   // You will need to use the Gaussian random number generator provided. For
   // example, to generate a random number from a Gaussian with mean 0, and
@@ -281,7 +282,7 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // float k3 = CONFIG_k3;
   // float k4 = CONFIG_k4;
 
-  PrintParticles(particles_);
+  //PrintParticles(particles_);
 
   // float x = rng_.Gaussian(0.0, 2.0);
   // printf("Random number drawn from Gaussian distribution with 0 mean and "
