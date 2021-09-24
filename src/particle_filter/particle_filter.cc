@@ -88,7 +88,51 @@ Vector2f GetOdomAccel2f(const Vector2f& last_vel, const Vector2f& current_vel, f
   return (last_vel - current_vel) * del_time;
 }
 
+void ParticleFilter::UpdateOdometry(const Vector2f& odom_loc,
+                                    const float odom_angle){
+  if (!odom_initialized_) {
+    curr_odom_angle_ = odom_angle;
+    curr_odom_loc_ = odom_loc;
+    odom_initialized_ = true;
+    return;
+  }
 
+  curr_odom_loc_ = odom_loc;
+  curr_odom_angle_ = odom_angle;
+  curr_time_ = ros::Time::now().toSec();
+  del_time_ = curr_time_ - prev_time_;
+  odom_vel2f_ = GetOdomVel2f(prev_odom_loc_, curr_odom_loc_, del_time_);
+  odom_accel2f_ = GetOdomAccel2f(prev_odom_vel2f_, odom_vel2f_, del_time_);
+  odom_vel_ = Vel2f_To_Vel(odom_vel2f_);
+  odom_accel_ = Accel2f_To_Accel(odom_accel2f_);
+  del_odom_angle_ = curr_odom_angle_ - prev_odom_angle_;
+  odom_omega_ = del_odom_angle_ / del_time_;
+
+  ROS_INFO("----------------------------");
+  ROS_INFO("prev_time_ = %f", prev_time_);
+  ROS_INFO("curr_time_ = %f", curr_time_);
+  ROS_INFO("del_time_ = %f", del_time_);
+
+  ROS_INFO("prev_odom_loc_ = (%f, %f)", prev_odom_loc_.x(), prev_odom_loc_.y());
+  ROS_INFO("curr_odom_loc_ = (%f, %f)", curr_odom_loc_.x(), curr_odom_loc_.y());
+
+  ROS_INFO("prev_odom_vel2f_ = (%f, %f)", prev_odom_vel2f_.x(), prev_odom_vel2f_.y());
+  ROS_INFO("odom_vel2f_ = (%f, %f)", odom_vel2f_.x(), odom_vel2f_.y());
+  ROS_INFO("odom_vel_ = %f", odom_vel_);
+
+  ROS_INFO("odom_accel2f_ = (%f, %f)", odom_accel2f_.x(), odom_accel2f_.y());
+  ROS_INFO("odom_accel_ = %f", odom_accel_);
+
+  ROS_INFO("prev_odom_angle_ = %f", prev_odom_angle_);
+  ROS_INFO("curr_odom_angle_ = %f", curr_odom_angle_);
+  ROS_INFO("del_odom_angle_ = %f", del_odom_angle_);
+  ROS_INFO("odom_omega_ = %f", odom_omega_);
+
+  prev_time_ = curr_time_;
+  prev_odom_loc_ = odom_loc;
+  prev_odom_angle_ = odom_angle;
+  prev_odom_vel2f_ = odom_vel2f_;         
+}
 
 // ----------END HELPER FUNCTIONS-----------
 
@@ -143,7 +187,7 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     // You can create a new line segment instance as follows, for :
     line2f my_line(1, 2, 3, 4); // Line segment from (1,2) to (3.4).
     // Access the end points using `.p0` and `.p1` members:
-    //ROS_INFO("P0: (%f, %f), P1: (%f, %f)", my_line.p0.x(), my_line.p0.y(), my_line.p1.x(), my_line.p1.y());
+    // ROS_INFO("P0: (%f, %f), P1: (%f, %f)", my_line.p0.x(), my_line.p0.y(), my_line.p1.x(), my_line.p1.y());
     // Check for intersections:
     bool intersects = map_line.Intersects(my_line);
     // You can also simultaneously check for intersection, and return the point
@@ -151,9 +195,9 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     Vector2f intersection_point; // Return variable
     intersects = map_line.Intersection(my_line, &intersection_point);
     if (intersects) {
-      //ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
+      // ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
     } else {
-      //ROS_INFO("No intersection");
+      // ROS_INFO("No intersection");
     }
   }
 }
@@ -165,6 +209,7 @@ void ParticleFilter::Update(const vector<float>& ranges,
                             float angle_max,
                             Particle* p_ptr) {
   // Implement the update step of the particle filter here.
+
   // You will have to use the `GetPredictedPointCloud` to predict the expected
   // observations for each particle, and assign weights to the particles based
   // on the observation likelihood computed by relating the observation to the
@@ -215,34 +260,6 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   // Resample();
 }
 
-void ParticleFilter::UpdateOdometry(const Vector2f& odom_loc,
-                                    const float odom_angle){
-  if (!odom_initialized_) {
-    curr_odom_angle_ = odom_angle;
-    curr_odom_loc_ = odom_loc;
-    odom_initialized_ = true;
-    return;
-  }
-
-  prev_odom_loc_ = curr_odom_loc_;
-  prev_odom_angle_ = curr_odom_angle_;
-  curr_odom_loc_ = odom_loc;
-  curr_odom_angle_ = odom_angle;
-  curr_time_ = ros::Time::now().toSec();
-  del_time_ = curr_time_ - prev_time_;
-  prev_odom_vel2f_ = odom_vel2f_;
-  odom_vel2f_ = GetOdomVel2f(prev_odom_loc_, curr_odom_loc_, del_time_);
-  ROS_INFO("PREV %f %f", prev_odom_loc_.x(), prev_odom_loc_.y());
-  ROS_INFO("CURR %f %f", curr_odom_loc_.x(), curr_odom_loc_.y());
-  ROS_INFO("ODOM %f %f", odom_vel2f_.x(), odom_vel2f_.y());
-
-  odom_accel2f_ = GetOdomAccel2f(prev_odom_vel2f_, odom_vel2f_, del_time_);
-  odom_vel_ = Vel2f_To_Vel(odom_vel2f_);
-  odom_accel_ = Accel2f_To_Accel(odom_accel2f_);
-  del_odom_angle_ = curr_odom_angle_ - prev_odom_angle_;
-  odom_omega_ = del_odom_angle_ / del_time_;
-  prev_time_ = curr_time_;                  
-}
 
 void ParticleFilter::Predict(const Vector2f& odom_loc,
                              const float odom_angle) {
@@ -283,7 +300,7 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // float k3 = CONFIG_k3;
   // float k4 = CONFIG_k4;
 
-  //PrintParticles(particles_);
+  // PrintParticles(particles_);
 
   // float x = rng_.Gaussian(0.0, 2.0);
   // printf("Random number drawn from Gaussian distribution with 0 mean and "
