@@ -195,8 +195,8 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   localization_msg.pose.x = robot_loc.x();
   localization_msg.pose.y = robot_loc.y();
   localization_msg.pose.theta = robot_angle;
-  localization_publisher_.publish(localization_msg);
-  PublishVisualization();
+  // localization_publisher_.publish(localization_msg);
+  // PublishVisualizations();
 }
 
 void InitCallback(const amrl_msgs::Localization2DMsg& msg) {

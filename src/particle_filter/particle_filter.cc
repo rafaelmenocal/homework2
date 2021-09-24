@@ -30,6 +30,7 @@
 #include "shared/math/line2d.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
+#include "ros/ros.h"
 
 #include "config_reader/config_reader.h"
 #include "particle_filter.h"
@@ -47,15 +48,84 @@ using Eigen::Vector2i;
 using vector_map::VectorMap;
 
 DEFINE_double(num_particles, 50, "Number of particles");
+double current_time;
 
 namespace particle_filter {
 
 config_reader::ConfigReader config_reader_({"config/particle_filter.lua"});
+CONFIG_FLOAT(k1, "k1");
+CONFIG_FLOAT(k2, "k2");
+CONFIG_FLOAT(k3, "k3");
+CONFIG_FLOAT(k4, "k4");
+CONFIG_FLOAT(init_x, "init_x");
+CONFIG_FLOAT(init_y, "init_y");
+CONFIG_FLOAT(init_r, "init_r");
+CONFIG_FLOAT(init_loc_stddev, "init_loc_stddev");
+CONFIG_FLOAT(init_r_stddev, "init_r_stddev");
+
+// ---------START HELPER FUNCTIONS----------
+
+void PrintParticles(std::vector<Particle> particles){
+  ROS_INFO("----------------------");
+  for (int i = 0; i < int(particles.size()); i++){
+    ROS_INFO("[%d]: loc = (%f, %f), angle = %f, weight = %f", i, particles[i].loc.x(), particles[i].loc.y(), particles[i].angle, particles[i].weight);
+  }
+}
+
+float Vel2f_To_Vel(const Vector2f& velocity) {
+  return sqrt(pow(velocity.x(), 2) + pow(velocity.y(), 2));
+}
+
+float Accel2f_To_Accel(const Vector2f& accel) {
+  return sqrt(pow(accel.x(), 2) + pow(accel.y(), 2));
+}
+
+Vector2f GetOdomVel2f(const Vector2f& last_loc, const Vector2f& current_loc, float del_time) {
+  return (1 / del_time) * Vector2f(current_loc.x() - last_loc.x(), current_loc.y() - last_loc.y());
+}
+
+Vector2f GetOdomAccel2f(const Vector2f& last_vel, const Vector2f& current_vel, float del_time) {
+  return (last_vel - current_vel) * del_time;
+}
+
+
+
+// ----------END HELPER FUNCTIONS-----------
 
 ParticleFilter::ParticleFilter() :
     prev_odom_loc_(0, 0),
     prev_odom_angle_(0),
-    odom_initialized_(false) {}
+    odom_initialized_(false),
+    curr_odom_loc_(0, 0),
+    curr_odom_angle_(0),
+    curr_time_(0),
+    prev_time_(0),
+    del_time_(0),
+    prev_odom_vel_(0),
+    odom_vel2f_(0, 0),
+    odom_accel2f_(0, 0),
+    odom_vel_(0),
+    odom_accel_(0),
+    del_odom_angle_(0),
+    odom_omega_(0) {}
+
+    Eigen::Vector2f prev_odom_loc_;
+  float prev_odom_angle_;
+  bool odom_initialized_;
+
+  Eigen::Vector2f curr_odom_loc_;
+  float curr_odom_angle_;
+  double curr_time_;
+  double prev_time_;
+  double del_time_;
+  
+  Eigen::Vector2f prev_odom_vel_;
+  float odom_vel2f_;
+  float odom_accel2f_;
+  float odom_vel_;
+  float odom_accel_;
+  float del_odom_angle_;
+  float odom_omega_;
 
 void ParticleFilter::GetParticles(vector<Particle>* particles) const {
   *particles = particles_;
@@ -91,12 +161,7 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     // You can create a new line segment instance as follows, for :
     line2f my_line(1, 2, 3, 4); // Line segment from (1,2) to (3.4).
     // Access the end points using `.p0` and `.p1` members:
-    printf("P0: %f, %f P1: %f,%f\n", 
-           my_line.p0.x(),
-           my_line.p0.y(),
-           my_line.p1.x(),
-           my_line.p1.y());
-
+    ROS_INFO("P0: (%f, %f), P1: (%f, %f)", my_line.p0.x(), my_line.p0.y(), my_line.p1.x(), my_line.p1.y());
     // Check for intersections:
     bool intersects = map_line.Intersects(my_line);
     // You can also simultaneously check for intersection, and return the point
@@ -104,11 +169,9 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
     Vector2f intersection_point; // Return variable
     intersects = map_line.Intersection(my_line, &intersection_point);
     if (intersects) {
-      printf("Intersects at %f,%f\n", 
-             intersection_point.x(),
-             intersection_point.y());
+      ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
     } else {
-      printf("No intersection\n");
+      ROS_INFO("No intersection");
     }
   }
 }
@@ -177,6 +240,32 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // Implement the motion model predict step here, to propagate the particles
   // forward based on odometry.
 
+  // If odometry has not been initialized, we can't do anything.
+  if (!odom_initialized_) {
+    odom_start_angle_ = angle;
+    odom_start_loc_ = loc;
+    odom_initialized_ = true;
+    return;
+  }
+
+  prev_odom_loc_ = odom_loc_;
+  prev_odom_angle_ = odom_angle_;
+
+  curr_odom_loc_ = odom_loc;
+  curr_odom_angle_ = odom_angle;
+  curr_time_ = ros::Time::now().toSec();
+
+  del_time_ = curr_time_ - prev_time_;
+  prev_odom_vel_ = odom_vel_;
+  odom_vel2f_ = GetOdomVel2f(prev_odom_loc_, odom_loc_, del_time_);
+  odom_accel2f_ = GetOdomAccel2f(prev_odom_vel_, odom_vel_, del_time_);
+  odom_vel_ = Vel2f_To_Vel(odom_vel2f_);
+  odom_accel_ = Accel2f_To_Accel(odom_accel2f_);
+  del_angle_ = odom_angle_ - prev_odom_angle_;
+  odom_omega_ = del_angle_ / del_time_;
+
+  prev_time = curr_time;
+
   // here we will use motion model to predict location of particle at next time step
   // start with n particles_ with position (px,py)
   // split particles into 4 groups for each error term (tet, ter, ret, rer)
@@ -187,16 +276,35 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   //     and store in new data structure?  next_particles_
   // return how likely it is for each particle to be at the next location loc_hat, angle_hat
   //     based on 1) starting location, 2) predicted location, 3) odometry
+  
+  for (int i = 0; i < int(particles_.size()); i++){
+    float trans_err_trans = 0.0;
+    float trans_err_rot = 0.0;
+    float rot_err_trans = 0.0;
+    float rot_err_rot = 0.0;
 
 
+    float del_trans = 
+    particles_[i].loc = Vector2f(x, y);
+    particles_[i].angle = r;
+    particles_[i].weight = 1.0;
+  }
 
   // You will need to use the Gaussian random number generator provided. For
   // example, to generate a random number from a Gaussian with mean 0, and
   // standard deviation 2:
-  float x = rng_.Gaussian(0.0, 2.0);
-  printf("Random number drawn from Gaussian distribution with 0 mean and "
-         "standard deviation of 2 : %f\n", x);
+  // float k1 = CONFIG_k1;
+  // float k2 = CONFIG_k2;
+  // float k3 = CONFIG_k3;
+  // float k4 = CONFIG_k4;
+
+  PrintParticles(particles_);
+
+  // float x = rng_.Gaussian(0.0, 2.0);
+  // printf("Random number drawn from Gaussian distribution with 0 mean and "
+  //        "standard deviation of 2 : %f\n", x);
 }
+
 
 void ParticleFilter::Initialize(const string& map_file,
                                 const Vector2f& loc,
@@ -206,13 +314,19 @@ void ParticleFilter::Initialize(const string& map_file,
   // some distribution around the provided location and angle.
   map_.Load(map_file);
 
-  //initialize a vector of particles in the form
-  // partcles_ of size num_particles = something
-  // normally distributed locations ie. float x, y = loc + rng_.Gaussian(mean, stddev);
-  // normally distirbuted angles ie. float ang = angle + rng_.Gaussian(mean, stddev);
-  // weights = 1;
+  // Initialize the particles of size num_particles
+  particles_ = std::vector<Particle>(num_particles_);
 
-  // 
+  // Create randomly distributed particles around (init_x, init_y).
+  for (int i = 0; i < int(particles_.size()); i++){
+    float x = rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
+    float y = rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
+    float r = rng_.Gaussian(angle, CONFIG_init_r_stddev);
+    particles_[i].loc = Vector2f(x, y);
+    particles_[i].angle = r;
+    particles_[i].weight = 1.0;
+  }
+  
 }
 
 void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr, 

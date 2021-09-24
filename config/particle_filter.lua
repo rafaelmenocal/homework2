@@ -1,4 +1,10 @@
 map = "maps/GDC1.txt"
-init_x = 14.7
-init_y = 14.24
+init_x = 0
+init_y = 0
 init_r = 0
+init_loc_stddev = 0.10
+init_r_stddev = 0.10
+k1 = 1
+k2 = 1
+k3 = 1
+k4 = 1

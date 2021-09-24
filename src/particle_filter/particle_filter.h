@@ -102,10 +102,20 @@ class ParticleFilter {
   Eigen::Vector2f prev_odom_loc_;
   float prev_odom_angle_;
   bool odom_initialized_;
-  // const int num_particles_ = 50;
-  // loc_x_stddev = ?;
-  // loc_y_stddev = ?;
-  // angle_stddev = ?;
+
+  Eigen::Vector2f curr_odom_loc_;
+  float curr_odom_angle_;
+  double curr_time_;
+  double prev_time_;
+  double del_time_;
+  
+  Eigen::Vector2f prev_odom_vel_;
+  float odom_vel2f_;
+  float odom_accel2f_;
+  float odom_vel_;
+  float odom_accel_;
+  float del_odom_angle_;
+  float odom_omega_;
 
 };
 }  // namespace slam
