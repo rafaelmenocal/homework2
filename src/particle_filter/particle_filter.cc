@@ -81,7 +81,7 @@ float Accel2f_To_Accel(const Vector2f& accel) {
 }
 
 Vector2f GetOdomVel2f(const Vector2f& last_loc, const Vector2f& current_loc, float del_time) {
-  return Vector2f(current_loc.x() - last_loc.x(), current_loc.y() - last_loc.y());
+  return (1/ del_time) * Vector2f(current_loc.x() - last_loc.x(), current_loc.y() - last_loc.y());
 }
 
 Vector2f GetOdomAccel2f(const Vector2f& last_vel, const Vector2f& current_vel, float del_time) {
@@ -264,14 +264,15 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // return how likely it is for each particle to be at the next location loc_hat, angle_hat
   //     based on 1) starting location, 2) predicted location, 3) odometry
 
-  for (for auto& particle : particles_){
+  for (auto& particle : particles_){
     // float trans_err_trans = 0.0;
     // float trans_err_rot = 0.0;
     // float rot_err_trans = 0.0;
     // float rot_err_rot = 0.0;
-    particles_[i].loc.x() += odom_vel_;
+    particle.loc.x() += cos( particle.angle) * (odom_vel_ * del_time_);
+    particle.loc.y() += sin( particle.angle) * (odom_vel_ * del_time_);
     //particles_[i].angle = r;
-    particles_[i].weight = 1.0;
+    particle.weight = 1.0;
   }
 
   // You will need to use the Gaussian random number generator provided. For
