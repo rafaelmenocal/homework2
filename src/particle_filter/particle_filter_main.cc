@@ -41,6 +41,7 @@
 #include "rosbag/bag.h"
 #include "rosbag/view.h"
 #include "ros/package.h"
+// #include "particle.h"
 
 #include "config_reader/config_reader.h"
 #include "shared/math/math_util.h"
@@ -100,9 +101,9 @@ void InitializeMsgs() {
 }
 
 void PublishParticles() {
-  vector<particle_filter::Particle> particles;
+  vector<Particle> particles;
   particle_filter_.GetParticles(&particles);
-  for (const particle_filter::Particle& p : particles) {
+  for (const Particle& p : particles) {
     DrawParticle(p.loc, p.angle, vis_msg_);
   }
 }

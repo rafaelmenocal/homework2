@@ -34,6 +34,7 @@
 
 #include "config_reader/config_reader.h"
 #include "particle_filter.h"
+// #include "particle.h"
 
 #include "vector_map/vector_map.h"
 
@@ -282,14 +283,8 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   //     based on 1) starting location, 2) predicted location, 3) odometry
 
   for (auto& particle : particles_){
-    // float trans_err_trans = 0.0;
-    // float trans_err_rot = 0.0;
-    // float rot_err_trans = 0.0;
-    // float rot_err_rot = 0.0;
-    particle.loc.x() += cos( particle.angle) * (odom_vel_ * del_time_);
-    particle.loc.y() += sin( particle.angle) * (odom_vel_ * del_time_);
-    //particles_[i].angle = r;
-    particle.weight = 1.0;
+    Eigen::Vector2f tet = particle.trans_err_trans(odom_vel_, del_time_);
+    particle.loc += odom_vel_ * del_time_ * Vector2f(cos(particle.angle), sin(particle.angle)) + tet;
   }
 
   // You will need to use the Gaussian random number generator provided. For

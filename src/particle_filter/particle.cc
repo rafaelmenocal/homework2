@@ -3,7 +3,7 @@
     //Functions to change this function's location and angle
 
     //This function returns the change in x and y location, and internally updates the angle
-    Particle::update_position(float_t speed, double del_time, float_t ang_vel) {
+    int Particle::update_position(float_t speed, double del_time, float_t ang_vel) {
         return 0;
     }
 

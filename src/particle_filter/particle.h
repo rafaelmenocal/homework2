@@ -8,7 +8,7 @@ class Particle {
     double weight;
 
     //Functions to change this function's location and angle
-    Particle::update_position(float_t speed, double del_time, float_t ang_vel);
+    int update_position(float_t speed, double del_time, float_t ang_vel);
     Eigen::Vector2f get_del_loc(float_t speed, double del_time, float_t ang_vel);
     float_t get_del_angle(float_t speed, double del_time, float_t ang_vel);
 
@@ -17,11 +17,9 @@ class Particle {
     double reset_weight();
     double normalize_weight(double normalize_by);
 
-    private:
-
     //Functions to calculate the different types of error
-    float_t trans_err_trans(float_t std_dev);
-    float_t trans_err_rot(float_t std_dev);
+    Eigen::Vector2f trans_err_trans(float_t speed, double del_time);
+    Eigen::Vector2f trans_err_rot(float_t ang_vel, double del_time);
     float_t rot_err_rot(float_t std_dev);
     float_t rot_err_trans(float_t std_dev);
 };
