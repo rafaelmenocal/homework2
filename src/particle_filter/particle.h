@@ -1,3 +1,5 @@
+#include "eigen3/Eigen/Dense"
+
 class Particle {
     public:
     
@@ -6,7 +8,7 @@ class Particle {
     double weight;
 
     //Functions to change this function's location and angle
-    Eigen::Vector2f get_del_loc(Eigen::Vector2f vel, double del_time);
+    Eigen::Vector2f get_del_loc(float_t speed, double del_time);
     float_t get_del_angle(float_t ang_vel, double del_time);
 
     //Functions to edit the weight
