@@ -109,9 +109,9 @@ class ParticleFilter {
   double prev_time_;
   double del_time_;
   
-  Eigen::Vector2f prev_odom_vel_;
-  float odom_vel2f_;
-  float odom_accel2f_;
+  Eigen::Vector2f prev_odom_vel2f_;
+  Eigen::Vector2f odom_vel2f_;
+  Eigen::Vector2f odom_accel2f_;
   float odom_vel_;
   float odom_accel_;
   float del_odom_angle_;

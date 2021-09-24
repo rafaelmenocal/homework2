@@ -101,31 +101,13 @@ ParticleFilter::ParticleFilter() :
     curr_time_(0),
     prev_time_(0),
     del_time_(0),
-    prev_odom_vel_(0),
+    prev_odom_vel2f_(0, 0),
     odom_vel2f_(0, 0),
     odom_accel2f_(0, 0),
     odom_vel_(0),
     odom_accel_(0),
     del_odom_angle_(0),
     odom_omega_(0) {}
-
-    Eigen::Vector2f prev_odom_loc_;
-  float prev_odom_angle_;
-  bool odom_initialized_;
-
-  Eigen::Vector2f curr_odom_loc_;
-  float curr_odom_angle_;
-  double curr_time_;
-  double prev_time_;
-  double del_time_;
-  
-  Eigen::Vector2f prev_odom_vel_;
-  float odom_vel2f_;
-  float odom_accel2f_;
-  float odom_vel_;
-  float odom_accel_;
-  float del_odom_angle_;
-  float odom_omega_;
 
 void ParticleFilter::GetParticles(vector<Particle>* particles) const {
   *particles = particles_;
@@ -242,29 +224,29 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
 
   // If odometry has not been initialized, we can't do anything.
   if (!odom_initialized_) {
-    odom_start_angle_ = angle;
-    odom_start_loc_ = loc;
+    curr_odom_angle_ = odom_angle;
+    curr_odom_loc_ = odom_loc;
     odom_initialized_ = true;
     return;
   }
 
-  prev_odom_loc_ = odom_loc_;
-  prev_odom_angle_ = odom_angle_;
+  prev_odom_loc_ = odom_loc;
+  prev_odom_angle_ = odom_angle;
 
   curr_odom_loc_ = odom_loc;
   curr_odom_angle_ = odom_angle;
   curr_time_ = ros::Time::now().toSec();
 
   del_time_ = curr_time_ - prev_time_;
-  prev_odom_vel_ = odom_vel_;
-  odom_vel2f_ = GetOdomVel2f(prev_odom_loc_, odom_loc_, del_time_);
-  odom_accel2f_ = GetOdomAccel2f(prev_odom_vel_, odom_vel_, del_time_);
+  prev_odom_vel2f_ = odom_vel2f_;
+  odom_vel2f_ = GetOdomVel2f(prev_odom_loc_, curr_odom_loc_, del_time_);
+  odom_accel2f_ = GetOdomAccel2f(prev_odom_vel2f_, odom_vel2f_, del_time_);
   odom_vel_ = Vel2f_To_Vel(odom_vel2f_);
   odom_accel_ = Accel2f_To_Accel(odom_accel2f_);
-  del_angle_ = odom_angle_ - prev_odom_angle_;
-  odom_omega_ = del_angle_ / del_time_;
+  del_odom_angle_ = curr_odom_angle_ - prev_odom_angle_;
+  odom_omega_ = del_odom_angle_ / del_time_;
 
-  prev_time = curr_time;
+  prev_time_ = curr_time_;
 
   // here we will use motion model to predict location of particle at next time step
   // start with n particles_ with position (px,py)
@@ -277,18 +259,18 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   // return how likely it is for each particle to be at the next location loc_hat, angle_hat
   //     based on 1) starting location, 2) predicted location, 3) odometry
   
-  for (int i = 0; i < int(particles_.size()); i++){
-    float trans_err_trans = 0.0;
-    float trans_err_rot = 0.0;
-    float rot_err_trans = 0.0;
-    float rot_err_rot = 0.0;
+  // for (int i = 0; i < int(particles_.size()); i++){
+  //   float trans_err_trans = 0.0;
+  //   float trans_err_rot = 0.0;
+  //   float rot_err_trans = 0.0;
+  //   float rot_err_rot = 0.0;
 
 
-    float del_trans = 
-    particles_[i].loc = Vector2f(x, y);
-    particles_[i].angle = r;
-    particles_[i].weight = 1.0;
-  }
+  //   float del_trans = 
+  //   particles_[i].loc = Vector2f(x, y);
+  //   particles_[i].angle = r;
+  //   particles_[i].weight = 1.0;
+  // }
 
   // You will need to use the Gaussian random number generator provided. For
   // example, to generate a random number from a Gaussian with mean 0, and
@@ -315,7 +297,7 @@ void ParticleFilter::Initialize(const string& map_file,
   map_.Load(map_file);
 
   // Initialize the particles of size num_particles
-  particles_ = std::vector<Particle>(num_particles_);
+  particles_ = std::vector<Particle>(FLAGS_num_particles);
 
   // Create randomly distributed particles around (init_x, init_y).
   for (int i = 0; i < int(particles_.size()); i++){
