@@ -255,9 +255,12 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_min,
                                   float angle_max) {
   // A new laser scan observation is available (in the laser frame)
+  // only update if particle has moved 15 cm since last Update call
+  // for (auto& particle : particles_){
+  //   Update(ranges, range_min, range_max, angle_min, angle_max, *particle);
+  // }
   
-  // Call the Update and Resample steps as necessary.
-  // for each particle p in partcles_ -> Update(ranges, range_min, range_max, angle_min, angle_max, p);
+  // we shouldn't resample every time we update
   // Resample();
 }
 
