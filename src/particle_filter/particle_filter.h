@@ -82,6 +82,12 @@ class ParticleFilter {
   // Resample particles.
   void Resample();
 
+  // Print particles
+  void PrintParticles();
+
+  // Get Max Weight of all particles
+  double GetMaxWeight();
+
   // For debugging: get predicted point cloud from current location.
   void GetPredictedPointCloud(const Eigen::Vector2f& loc,
                               const float angle,
@@ -92,6 +98,13 @@ class ParticleFilter {
                               float angle_max,
                               std::vector<Eigen::Vector2f>* scan);
 
+void GetObservedPointCloud(const std::vector<float>& ranges,
+                           int num_ranges,
+                           float range_min,
+                           float range_max,
+                           float angle_min,
+                           float angle_max,
+                           std::vector<Eigen::Vector2f>* obs_scan_ptr);
  private:
 
   // List of particles being tracked.

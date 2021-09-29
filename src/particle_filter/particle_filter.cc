@@ -48,8 +48,9 @@ using Eigen::Vector2f;
 using Eigen::Vector2i;
 using vector_map::VectorMap;
 
-DEFINE_double(num_particles, 100, "Number of particles");
+DEFINE_double(num_particles, 2, "Number of particles");
 double current_time;
+const Vector2f kLaserLoc(0.2, 0);
 
 namespace particle_filter {
 
@@ -63,13 +64,16 @@ CONFIG_FLOAT(init_y, "init_y");
 CONFIG_FLOAT(init_r, "init_r");
 CONFIG_FLOAT(init_loc_stddev, "init_loc_stddev");
 CONFIG_FLOAT(init_r_stddev, "init_r_stddev");
+CONFIG_FLOAT(d_short, "d_short");
+CONFIG_FLOAT(d_long, "d_long");
+CONFIG_FLOAT(ol_sigma, "ol_sigma");
 
 // ---------START HELPER FUNCTIONS----------
 
-void PrintParticles(std::vector<Particle> particles){
+void ParticleFilter::PrintParticles(){
   ROS_INFO("----------------------");
-  for (int i = 0; i < int(particles.size()); i++){
-    ROS_INFO("[%d]: loc = (%f, %f), angle = %f, weight = %f", i, particles[i].loc.x(), particles[i].loc.y(), particles[i].angle, particles[i].weight);
+  for (int i = 0; i < int(particles_.size()); i++){
+    ROS_INFO("[%d]: loc = (%f, %f), angle = %f, weight = %f", i, particles_[i].loc.x(), particles_[i].loc.y(), particles_[i].angle, particles_[i].weight);
   }
 }
 
@@ -158,6 +162,7 @@ void ParticleFilter::GetParticles(vector<Particle>* particles) const {
   *particles = particles_;
 }
 
+
 void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
                                             const float angle,
                                             int num_ranges,
@@ -173,61 +178,112 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
   // This is NOT the motion model predict step: it is the prediction of the
   // expected observations, to be used for the update step.
 
-  // Note: The returned values must be set using the `scan` variable:
+  const float angle_inc = (angle_max - angle_min) / num_ranges;
   scan.resize(num_ranges);
-  // Fill in the entries of scan using array writes, e.g. scan[i] = ...
+
+  float max_ray_range = 12.0;
+
+  //iterate over each ray from laser
   for (size_t i = 0; i < scan.size(); ++i) {
-    scan[i] = Vector2f(0, 0);
+    float current_angle = i * angle_inc + angle_min + angle;
+    Vector2f laser_point = Vector2f(loc.x() + kLaserLoc.x(), loc.y() + kLaserLoc.y());
+    // current_ray is defined using odometry x and y
+    line2f current_ray(laser_point.x(), laser_point.y(), max_ray_range * cos(current_angle), max_ray_range * sin(current_angle)); 
+    float min_intersection_dist = max_ray_range; 
+    Vector2f min_intersection_point = current_ray.p1;
+
+    // iterate over each line in the map and return shortest distance to interection point
+    for (size_t i = 0; i < map_.lines.size(); ++i) {
+      const line2f map_line = map_.lines[i];
+      Vector2f intersection_point; 
+
+      // redefine current_ray in terms of map coordinates??
+      bool intersects = map_line.Intersection(current_ray, &intersection_point);
+      if (intersects) {
+        // ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
+        float intersection_dist = (intersection_point - laser_point).norm(); 
+        if (intersection_dist <= min_intersection_dist){
+          min_intersection_dist = intersection_dist;
+          min_intersection_point = intersection_point;
+        }
+      } else {
+        // ROS_INFO("No intersection");
+      }
+    }
+
+    scan[i] = min_intersection_point; 
+  }
+  
+}
+
+void ParticleFilter::GetObservedPointCloud(const vector<float>& ranges,
+                                           int num_ranges,
+                                           float range_min,
+                                           float range_max,
+                                           float angle_min,
+                                           float angle_max,
+                                           vector<Vector2f>* obs_scan_ptr) {
+  
+  vector<Vector2f>& obs_scan = *obs_scan_ptr;
+
+  const float angle_inc = (angle_max - angle_min) / num_ranges;
+  obs_scan.resize(num_ranges);
+
+  //iterate over each ray from laser
+  for (size_t i = 0; i < obs_scan.size(); ++i) {
+    float current_angle = i * angle_inc + angle_min;
+    obs_scan[i] = kLaserLoc + Vector2f(ranges[i] * cos(current_angle), ranges[i] * sin(current_angle));
   }
 
-  // The line segments in the map are stored in the `map_.lines` variable. You
-  // can iterate through them as:
-  for (size_t i = 0; i < map_.lines.size(); ++i) {
-    const line2f map_line = map_.lines[i];
-    // The line2f class has helper functions that will be useful.
-    // You can create a new line segment instance as follows, for :
-    line2f my_line(1, 2, 3, 4); // Line segment from (1,2) to (3.4).
-    // Access the end points using `.p0` and `.p1` members:
-    // ROS_INFO("P0: (%f, %f), P1: (%f, %f)", my_line.p0.x(), my_line.p0.y(), my_line.p1.x(), my_line.p1.y());
-    // Check for intersections:
-    bool intersects = map_line.Intersects(my_line);
-    // You can also simultaneously check for intersection, and return the point
-    // of intersection:
-    Vector2f intersection_point; // Return variable
-    intersects = map_line.Intersection(my_line, &intersection_point);
-    if (intersects) {
-      // ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
-    } else {
-      // ROS_INFO("No intersection");
-    }
+}
+
+double Observe_Likelihood(double s_t_i, double pred_s_t_i, float s_min, float s_max, float d_short, float d_long, float sigma){
+  if ((s_t_i < s_min) || (s_t_i > s_max)) {
+    ROS_INFO("OL Branch: (s_t_i < s_min) || (s_t_i > s_max)");
+    return 0;
+  }
+  else if (s_t_i < pred_s_t_i - d_short){
+    ROS_INFO("OL Branch: (s_t_i < pred_s_t_i - d_short)");
+    return exp(-1 * pow(d_short, 2) / pow(sigma, 2));
+  }
+  else if (s_t_i > pred_s_t_i + d_long){
+    ROS_INFO("OL_Branch: (s_t_i > pred_s_t_i + d_long)");
+    return exp(-1 * pow(d_long, 2) / pow(sigma, 2));
+  }
+  else {
+    ROS_INFO("OL_Branch: Otherwise");
+    return exp(-1 * pow(s_t_i - pred_s_t_i, 2) / pow(sigma, 2));
   }
 }
 
+// update p_ptr->weight based on comparisons of predictedpointcloud with observedpointcloud
 void ParticleFilter::Update(const vector<float>& ranges,
                             float range_min,
                             float range_max,
                             float angle_min,
                             float angle_max,
                             Particle* p_ptr) {
-  // Implement the update step of the particle filter here.
+  
+  vector<Vector2f> pred_scan;
+  int num_ranges = ranges.size();
+  GetPredictedPointCloud(p_ptr->loc, p_ptr->angle, num_ranges, range_min, range_max, angle_min, angle_max, &pred_scan);
 
-  // You will have to use the `GetPredictedPointCloud` to predict the expected
-  // observations for each particle, and assign weights to the particles based
-  // on the observation likelihood computed by relating the observation to the
-  // predicted point cloud.
+  vector<Vector2f> observed_scan;
+  GetObservedPointCloud(ranges, num_ranges, range_min, range_max, angle_min, angle_max, &observed_scan);
 
-  // here we will use obersvation likelihood model to update weights
-  // for each ray from laser:
-  //      determine s_t_i for p_ptr based on distance from car to 
-  //            predicted intersection with wall
-  //      calculate p(s_t_i|x_t) {where x_t == next_particles_?} by 
-  //            proportional_to {ignore s_t_i < s_min ||J s_t_i > s_max
-  //                             exp(.),
-  //                             exp(.),
-  //                             exp(.)}
-  // find p(s_t|x) "probability of observing laser points given predicted location"
-  //        using product of all p(s_t_i | x_t)s "inidividual probabilities of each ray"
-  // update weight of p_ptr to be p_ptr.weight * p(s_t|x);
+  double p_s_t = 0.0;
+  for (size_t i = 0; i < pred_scan.size(); ++i) {
+    double pred_s_t_i = ((p_ptr->loc + kLaserLoc) - pred_scan[i]).norm(); 
+    double s_t_i = ((p_ptr->loc + kLaserLoc) - observed_scan[i]).norm();
+    double ol = Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma);
+    double log_ol = log(ol);
+    ROS_INFO(" [ray %ld]: pred_s_t_i = %f, s_t_i = %f, ol = %f, log_ol = %f", i, pred_s_t_i, s_t_i, ol, log_ol);
+    
+    p_s_t += log_ol;
+    // p_s_t += log(Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma));
+  }
+  ROS_INFO(" === p_s_t = %f", p_s_t);
+  p_ptr->weight = p_s_t;
 
 }
 
@@ -255,36 +311,49 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_min,
                                   float angle_max) {
   // A new laser scan observation is available (in the laser frame)
+  
   // only update if particle has moved 15 cm since last Update call
-  // for (auto& particle : particles_){
-  //   Update(ranges, range_min, range_max, angle_min, angle_max, *particle);
-  // }
+  // update the weight of particle.weight for each particle
+  ROS_INFO("Observe Laser");
+  int i = 1;
+  for (auto& particle : particles_){
+    ROS_INFO("Particle %d: ", i);
+    i++;
+    Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
+  }
+
+  ROS_INFO("Before Normalization:");
+  PrintParticles();
+
+  double log_w_max = GetMaxWeight();
+  ROS_INFO("log_w_max = %f", log_w_max);
+
+  for (auto& particle : particles_){
+    particle.normalize_weight(log_w_max);
+  }
+  ROS_INFO("After Normalization:");
+  PrintParticles();
   
   // we shouldn't resample every time we update
+  // update particles_ based on weights produced in Update()
   // Resample();
+}
+
+double ParticleFilter::GetMaxWeight() {
+  double result = 0;
+  for (auto& particle : particles_) {
+    result = particle.weight > result ? particle.weight : result;
+  }
+  return result;
 }
 
 
 void ParticleFilter::Predict(const Vector2f& odom_loc,
                              const float odom_angle) {
-  // Implement the predict step of the particle filter here.
-  // A new odometry value is available (in the odom frame)
-  // Implement the motion model predict step here, to propagate the particles
-  // forward based on odometry.
 
   UpdateOdometry(odom_loc, odom_angle);
 
   // here we will use motion model to predict location of particle at next time step
-  // start with n particles_ with position (px,py)
-  // split particles into 4 groups for each error term (tet, ter, ret, rer)
-  //     or apply each type of error for all particles
-  // how do we represent/calculate tet, ter, ret, rer 
-  //     (test with all errors = 0, or individually each error type)
-  // predict location loc_hat and angle_hat of particles at next time step given odom velocity (given odom_location/angle) + error noise
-  //     and store in new data structure?  next_particles_
-  // return how likely it is for each particle to be at the next location loc_hat, angle_hat
-  //     based on 1) starting location, 2) predicted location, 3) odometry
-
   for (auto& particle : particles_){
     Eigen::Vector2f tet = particle.trans_err_trans(odom_vel_, del_time_, rng_, CONFIG_k1);
     Eigen::Vector2f ter = particle.trans_err_rot(odom_omega_, del_time_, rng_, CONFIG_k1);
@@ -294,6 +363,9 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
     particle.loc += odom_vel_ * del_time_ * Vector2f(cos(particle.angle), sin(particle.angle)) + tet + ter;
     particle.angle += odom_omega_ * del_time_ + ret + rer;
   }
+
+  // return how likely it is for each particle to be at the next location loc_hat, angle_hat
+  //     based on 1) starting location, 2) predicted location, 3) odometry
 
 }
 
