@@ -109,7 +109,7 @@ void PublishParticles() {
 }
 
 void PublishPredictedScan() {
-  const uint32_t kColor = 0xd67d00;
+  const uint32_t kColor = 0x289126;
   Vector2f robot_loc(0, 0);
   float robot_angle(0);
   particle_filter_.GetLocation(&robot_loc, &robot_angle);
@@ -117,7 +117,7 @@ void PublishPredictedScan() {
   particle_filter_.GetPredictedPointCloud(
       robot_loc,
       robot_angle,
-      last_laser_msg_.ranges.size(),
+      float(last_laser_msg_.ranges.size()),
       last_laser_msg_.range_min,
       last_laser_msg_.range_max,
       last_laser_msg_.angle_min,
@@ -197,8 +197,8 @@ void OdometryCallback(const nav_msgs::Odometry& msg) {
   localization_msg.pose.x = robot_loc.x();
   localization_msg.pose.y = robot_loc.y();
   localization_msg.pose.theta = robot_angle;
-  // localization_publisher_.publish(localization_msg);
-  // PublishVisualizations();
+  localization_publisher_.publish(localization_msg);
+  PublishVisualization();
 }
 
 void InitCallback(const amrl_msgs::Localization2DMsg& msg) {

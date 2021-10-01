@@ -48,7 +48,7 @@ using Eigen::Vector2f;
 using Eigen::Vector2i;
 using vector_map::VectorMap;
 
-DEFINE_double(num_particles, 2, "Number of particles");
+DEFINE_double(num_particles, 50, "Number of particles");
 double current_time;
 const Vector2f kLaserLoc(0.2, 0);
 
@@ -67,6 +67,7 @@ CONFIG_FLOAT(init_r_stddev, "init_r_stddev");
 CONFIG_FLOAT(d_short, "d_short");
 CONFIG_FLOAT(d_long, "d_long");
 CONFIG_FLOAT(ol_sigma, "ol_sigma");
+CONFIG_FLOAT(gamma, "gamma");
 
 // ---------START HELPER FUNCTIONS----------
 
@@ -165,7 +166,7 @@ void ParticleFilter::GetParticles(vector<Particle>* particles) const {
 
 void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
                                             const float angle,
-                                            int num_ranges,
+                                            float num_ranges,
                                             float range_min,
                                             float range_max,
                                             float angle_min,
@@ -179,16 +180,17 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
   // expected observations, to be used for the update step.
 
   const float angle_inc = (angle_max - angle_min) / num_ranges;
-  scan.resize(num_ranges);
+  scan.resize(int(num_ranges));
 
-  float max_ray_range = 12.0;
+  float max_ray_range = 10.0;
 
   //iterate over each ray from laser
-  for (size_t i = 0; i < scan.size(); ++i) {
+  for (int i = 0; i < int(num_ranges); ++i) {
     float current_angle = i * angle_inc + angle_min + angle;
     Vector2f laser_point = Vector2f(loc.x() + kLaserLoc.x(), loc.y() + kLaserLoc.y());
     // current_ray is defined using odometry x and y
-    line2f current_ray(laser_point.x(), laser_point.y(), max_ray_range * cos(current_angle), max_ray_range * sin(current_angle)); 
+    Vector2f ray_end_point = Vector2f(loc.x() + max_ray_range * cos(current_angle), loc.y() + max_ray_range * sin(current_angle));
+    line2f current_ray(laser_point.x(), laser_point.y(), ray_end_point.x(), ray_end_point.y()); 
     float min_intersection_dist = max_ray_range; 
     Vector2f min_intersection_point = current_ray.p1;
 
@@ -204,7 +206,8 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
         float intersection_dist = (intersection_point - laser_point).norm(); 
         if (intersection_dist <= min_intersection_dist){
           min_intersection_dist = intersection_dist;
-          min_intersection_point = intersection_point;
+          // min_intersection_point = intersection_point - laser_point; // from laser
+          min_intersection_point = intersection_point; // world frame
         }
       } else {
         // ROS_INFO("No intersection");
@@ -216,8 +219,10 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
   
 }
 
-void ParticleFilter::GetObservedPointCloud(const vector<float>& ranges,
-                                           int num_ranges,
+void ParticleFilter::GetObservedPointCloud(const Vector2f& loc,
+                                           const float angle,
+                                           const vector<float>& ranges,
+                                           float num_ranges,
                                            float range_min,
                                            float range_max,
                                            float angle_min,
@@ -225,34 +230,55 @@ void ParticleFilter::GetObservedPointCloud(const vector<float>& ranges,
                                            vector<Vector2f>* obs_scan_ptr) {
   
   vector<Vector2f>& obs_scan = *obs_scan_ptr;
+  obs_scan.resize(int(num_ranges));
+  Vector2f laser_point = Vector2f(loc.x() + kLaserLoc.x(), loc.y() + kLaserLoc.y());
 
-  const float angle_inc = (angle_max - angle_min) / num_ranges;
-  obs_scan.resize(num_ranges);
-
-  //iterate over each ray from laser
-  for (size_t i = 0; i < obs_scan.size(); ++i) {
+  const float index_inc = (ranges.size() / (num_ranges - 1));
+  const float angle_inc = (angle_max - angle_min) / (num_ranges - 1);
+  // ROS_INFO("ranges.size() = %ld", ranges.size());
+  // ROS_INFO("num_ranges = %f", num_ranges);
+  // ROS_INFO("angle_min = %f", angle_min);
+  // ROS_INFO("angle_max = %f", angle_max);
+  // ROS_INFO("index_inc = %f", index_inc);
+  // ROS_INFO("angle_inc = %f", angle_inc);
+  for (int i = 0; i < int(num_ranges); i++){
+    // ROS_INFO("(i * index_inc) = %d", int(i * index_inc));
+    // ROS_INFO("angle = i * angle_inc + angle_min = %f", i * angle_inc + angle_min);
     float current_angle = i * angle_inc + angle_min;
-    obs_scan[i] = kLaserLoc + Vector2f(ranges[i] * cos(current_angle), ranges[i] * sin(current_angle));
+    obs_scan[i] = laser_point + Vector2f(ranges[int(i * index_inc)] * cos(current_angle), ranges[int(i * index_inc)] * sin(current_angle));
   }
+
 
 }
 
-double Observe_Likelihood(double s_t_i, double pred_s_t_i, float s_min, float s_max, float d_short, float d_long, float sigma){
+double Observe_Likelihood(double s_t_i, double pred_s_t_i, float s_min, float s_max, float d_short, float d_long, float sigma, float gamma){
   if ((s_t_i < s_min) || (s_t_i > s_max)) {
-    ROS_INFO("OL Branch: (s_t_i < s_min) || (s_t_i > s_max)");
+    ROS_INFO("OL Branch: obs point not possible to see");
     return 0;
   }
   else if (s_t_i < pred_s_t_i - d_short){
-    ROS_INFO("OL Branch: (s_t_i < pred_s_t_i - d_short)");
-    return exp(-1 * pow(d_short, 2) / pow(sigma, 2));
+    ROS_INFO("OL Branch: obs pt much closer than pred pt");
+    return pow(exp(-1 * pow(d_short, 2) / pow(sigma, 2)), gamma);
   }
   else if (s_t_i > pred_s_t_i + d_long){
-    ROS_INFO("OL_Branch: (s_t_i > pred_s_t_i + d_long)");
-    return exp(-1 * pow(d_long, 2) / pow(sigma, 2));
+    ROS_INFO("OL Branch: obs pt much further than pred pt");
+    return pow(exp(-1 * pow(d_long, 2) / pow(sigma, 2)), gamma);
   }
   else {
-    ROS_INFO("OL_Branch: Otherwise");
-    return exp(-1 * pow(s_t_i - pred_s_t_i, 2) / pow(sigma, 2));
+    ROS_INFO("OL Branch: obs pt close than pred pt");
+    return pow(exp(-1 * pow(s_t_i - pred_s_t_i, 2) / pow(sigma, 2)), gamma);
+  }
+}
+
+struct bin{
+  double lower_bound;
+  double upper_bound;
+};
+
+void PrintBins(std::vector<bin> bins){
+  ROS_INFO("----------------------");
+  for (int i = 0; i < int(bins.size()); i++){
+    ROS_INFO("[%d]: l = %f, u = %f", i, bins[i].lower_bound, bins[i].upper_bound);
   }
 }
 
@@ -265,44 +291,71 @@ void ParticleFilter::Update(const vector<float>& ranges,
                             Particle* p_ptr) {
   
   vector<Vector2f> pred_scan;
-  int num_ranges = ranges.size();
+  float num_ranges = ranges.size() / 10.0;  // some of the ranges
   GetPredictedPointCloud(p_ptr->loc, p_ptr->angle, num_ranges, range_min, range_max, angle_min, angle_max, &pred_scan);
 
   vector<Vector2f> observed_scan;
-  GetObservedPointCloud(ranges, num_ranges, range_min, range_max, angle_min, angle_max, &observed_scan);
+  GetObservedPointCloud(p_ptr->loc, p_ptr->angle, ranges, num_ranges, range_min, range_max, angle_min, angle_max, &observed_scan);
 
   double p_s_t = 0.0;
-  for (size_t i = 0; i < pred_scan.size(); ++i) {
+  // for the given particle
+  // for each predicted ray, compare to corresponding observed ray
+  for (int i = 0; i < int(num_ranges); ++i) {
     double pred_s_t_i = ((p_ptr->loc + kLaserLoc) - pred_scan[i]).norm(); 
     double s_t_i = ((p_ptr->loc + kLaserLoc) - observed_scan[i]).norm();
-    double ol = Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma);
-    double log_ol = log(ol);
-    ROS_INFO(" [ray %ld]: pred_s_t_i = %f, s_t_i = %f, ol = %f, log_ol = %f", i, pred_s_t_i, s_t_i, ol, log_ol);
-    
+    double ol = Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma, CONFIG_gamma);
+    double log_ol;
+    if (ol == 0.0) {
+      continue;
+    }
+    log_ol = log(ol);
+    ROS_INFO(" [ray %d]: pred_s_t_i = %f, s_t_i = %f, ol = %f, log_ol = %f", i, pred_s_t_i, s_t_i, ol, log_ol);
     p_s_t += log_ol;
-    // p_s_t += log(Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma));
   }
   ROS_INFO(" === p_s_t = %f", p_s_t);
-  p_ptr->weight = p_s_t;
+  ROS_INFO(" === weight = %f", exp(p_s_t));
+  p_ptr->weight = exp(p_s_t);
 
 }
 
+
 void ParticleFilter::Resample() {
-  // create new_particles;
   // Resample the particles, proportional to their weights.
   // caculate total_sum of all weights in particles
-  // create bins with width  = weight / total_sum
-  // for each particle in particles (i = 1 to num_particles):
-  //      randomly generate number 0 - 1;
-  //      determine which bin that falls into -> bin_i
-  //      new_particles.push_back(particles_[bin_i])
-  // particles = new_particles;
 
-  // You will need to use the uniform random number generator provided. For
-  // example, to generate a random number between 0 and 1:
-  float x = rng_.UniformRandom(0, 1);
-  printf("Random number drawn from uniform distribution between 0 and 1: %f\n",
-         x);
+  // create bins data structure vector<bin>
+  std::vector<bin> bins(particles_.size());
+
+  double start_width = 0.0;
+  int p_i = 0;
+  // update bins with particle weights as min_max
+  for (auto& bin : bins){
+    bin.lower_bound = start_width;
+    bin.upper_bound = bin.lower_bound + particles_[p_i].weight;
+    p_i++;
+    start_width = bin.upper_bound;
+  }
+
+  PrintBins(bins);
+
+  std::vector<Particle> particles_copy_;
+  
+  // for every particle,
+  for (int i = 0; i < int(particles_.size()); i++){
+    // pick a random number between 0 - total width
+    float x = rng_.UniformRandom(0, (bins.end()--)->upper_bound);
+
+    // get the index of bins which x falls into
+    for (int j = 0; j < int(bins.size()); j++) {
+      if (bins[j].lower_bound <= x && x <= bins[j].upper_bound) {
+        particles_copy_.push_back(particles_[j]);
+        particles_copy_[i].weight = 1.0;
+      }
+    }
+  }
+
+  particles_ = particles_copy_;
+
 }
 
 void ParticleFilter::ObserveLaser(const vector<float>& ranges,
@@ -312,31 +365,25 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_max) {
   // A new laser scan observation is available (in the laser frame)
   
-  // only update if particle has moved 15 cm since last Update call
-  // update the weight of particle.weight for each particle
-  ROS_INFO("Observe Laser");
-  int i = 1;
   for (auto& particle : particles_){
-    ROS_INFO("Particle %d: ", i);
-    i++;
-    Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
+    if ((particle.prev_update_loc - particle.loc).norm() >= 0.15) {
+      Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
+      particle.prev_update_loc = particle.loc;
+
+      double w_max = GetMaxWeight();
+      for (auto& particle : particles_){
+        particle.normalize_weight(w_max);
+      }
+      PrintParticles();
+
+      if (rng_.UniformRandom(0.0, 1.0) <= 1.0) {
+        Resample();
+      }
+
+    }
   }
 
-  ROS_INFO("Before Normalization:");
-  PrintParticles();
-
-  double log_w_max = GetMaxWeight();
-  ROS_INFO("log_w_max = %f", log_w_max);
-
-  for (auto& particle : particles_){
-    particle.normalize_weight(log_w_max);
-  }
-  ROS_INFO("After Normalization:");
-  PrintParticles();
   
-  // we shouldn't resample every time we update
-  // update particles_ based on weights produced in Update()
-  // Resample();
 }
 
 double ParticleFilter::GetMaxWeight() {
@@ -390,6 +437,7 @@ void ParticleFilter::Initialize(const string& map_file,
     particles_[i].loc = Vector2f(x, y);
     particles_[i].angle = r;
     particles_[i].weight = 1.0;
+    particles_[i].prev_update_loc = Vector2f(x, y);
   }
   
 }
@@ -401,8 +449,21 @@ void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr,
   // Compute the best estimate of the robot's location based on the current set
   // of particles. The computed values must be set to the `loc` and `angle`
   // variables to return them. Modify the following assignments:
-  loc = Vector2f(0, 0);
-  angle = 0;
+
+  int N = particles_.size();
+  float sum_x = 0;
+  float sum_y = 0;
+  float sum_cos_angle = 0;
+  float sum_sin_angle = 0;
+  for (auto& particle : particles_){
+    sum_x += particle.loc.x();
+    sum_y += particle.loc.y();
+    sum_cos_angle += cos(particle.angle);
+    sum_sin_angle += sin(particle.angle);
+  }
+
+  loc = Vector2f(sum_x / N, sum_y / N);
+  angle = atan2(sum_sin_angle / N, sum_cos_angle / N);
 }
 
 

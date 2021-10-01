@@ -8,6 +8,7 @@ class Particle {
         Eigen::Vector2f loc;
         float_t angle;
         double weight;
+        Eigen::Vector2f prev_update_loc;
 
         //Functions to change this function's location and angle
         int update_position(float_t speed, double del_time, float_t ang_vel);
