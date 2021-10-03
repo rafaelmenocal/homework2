@@ -340,17 +340,29 @@ void ParticleFilter::Resample() {
 
   std::vector<Particle> particles_copy_;
   
-  // for every particle,
-  for (int i = 0; i < int(particles_.size()); i++){
-    // pick a random number between 0 - total width
-    float x = rng_.UniformRandom(0, (bins.end()--)->upper_bound);
+  // // resample without low variance
+  // for (int i = 0; i < int(particles_.size()); i++){
+  //   // pick a random number between 0 - total width
+  //   float x = rng_.UniformRandom(0, (bins.end()--)->upper_bound);
 
-    // get the index of bins which x falls into
-    for (int j = 0; j < int(bins.size()); j++) {
-      if (bins[j].lower_bound <= x && x <= bins[j].upper_bound) {
-        particles_copy_.push_back(particles_[j]);
-        particles_copy_[i].weight = 1.0;
-      }
+  //   // get the index of bins which x falls into
+  //   for (int j = 0; j < int(bins.size()); j++) {
+  //     if (bins[j].lower_bound <= x && x <= bins[j].upper_bound) {
+  //       particles_copy_.push_back(particles_[j]);
+  //       particles_copy_[i].weight = 1.0;
+  //     }
+  //   }
+  // }
+
+  // Resample with low variance
+  double x = rng_.UniformRandom(0, ((bins.end()--)->upper_bound) / FLAGS_num_particles);
+  for (int i = 0; i < int(particles_.size()); i++){
+      for (int j = 0; j < int(bins.size()); j++) {
+        double sample = x * (j + 1);
+        if (bins[j].lower_bound <= sample && sample <= bins[j].upper_bound) {
+          particles_copy_.push_back(particles_[j]);
+          particles_copy_[i].weight = 1.0; // /num_particles; ?
+        }
     }
   }
 
