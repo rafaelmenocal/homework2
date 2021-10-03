@@ -30,13 +30,12 @@
         return 0;
     }
 
-    double Particle::reset_weight() {
-        weight = 1; //EDIT THIS maybe, though if this is a good default weight, it's actually fine
-        return 0;
+    void Particle::reset_weight() {
+        weight = 1.0;
     }
-    double Particle::normalize_weight(double normalize_by) {
-        weight /= normalize_by; //Now, how we get the value to normalize by, I'm not sure
-        return 0;
+
+    void Particle::normalize_weight(double normalize_by) {
+        weight /= normalize_by;
     }
 
     Eigen::Vector2f Particle::trans_err_trans(

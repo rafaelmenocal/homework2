@@ -1,3 +1,6 @@
+#ifndef __SRC_PARTICLE_H__
+#define __SRC_PARTICLE_H__
+
 #include "eigen3/Eigen/Dense"
 
 #include "shared/util/random.h"
@@ -17,13 +20,30 @@ class Particle {
 
         //Functions to edit the weight
         double calc_weight();
-        double reset_weight();
-        double normalize_weight(double normalize_by);
+        void reset_weight();
+        void normalize_weight(double normalize_by);
 
         //Functions to calculate the different types of error
-        Eigen::Vector2f trans_err_trans(float_t speed, double del_time, util_random::Random& rng, float_t k1);
-        Eigen::Vector2f trans_err_rot(float_t ang_vel, double del_time, util_random::Random& rng, float_t k2);
-        float_t rot_err_rot(float_t ang_vel, double del_time, util_random::Random& rng, float_t k3);
-        float_t rot_err_trans(float_t speed, double del_time, util_random::Random& rng, float_t k4);
+        Eigen::Vector2f trans_err_trans(float_t speed,
+                                        double del_time,
+                                        util_random::Random& rng,
+                                        float_t k1);
+            
+        Eigen::Vector2f trans_err_rot(float_t ang_vel,
+                                      double del_time,
+                                      util_random::Random& rng,
+                                      float_t k2);
+        
+        float_t rot_err_rot(float_t ang_vel,
+                            double del_time,
+                            util_random::Random& rng,
+                            float_t k3);
+    
+        float_t rot_err_trans(float_t speed,
+                              double del_time,
+                              util_random::Random& rng,
+                              float_t k4);
 
 };
+
+#endif   // __SRC_PARTICLE_H__

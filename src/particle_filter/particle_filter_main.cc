@@ -117,7 +117,7 @@ void PublishPredictedScan() {
   particle_filter_.GetPredictedPointCloud(
       robot_loc,
       robot_angle,
-      float(last_laser_msg_.ranges.size()),
+      (int32_t)last_laser_msg_.ranges.size(),
       last_laser_msg_.range_min,
       last_laser_msg_.range_max,
       last_laser_msg_.angle_min,

@@ -27,7 +27,6 @@
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "shared/math/geometry.h"
-#include "shared/math/line2d.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
 #include "ros/ros.h"
@@ -42,7 +41,6 @@ using geometry::line2f;
 using std::cout;
 using std::endl;
 using std::string;
-using std::swap;
 using std::vector;
 using Eigen::Vector2f;
 using Eigen::Vector2i;
@@ -73,7 +71,7 @@ CONFIG_FLOAT(gamma, "gamma");
 
 void ParticleFilter::PrintParticles(){
   ROS_INFO("----------------------");
-  for (int i = 0; i < int(particles_.size()); i++){
+  for (int i = 0; i < num_particles_; i++) {
     ROS_INFO("[%d]: loc = (%f, %f), angle = %f, weight = %f", i, particles_[i].loc.x(), particles_[i].loc.y(), particles_[i].angle, particles_[i].weight);
   }
 }
@@ -164,14 +162,43 @@ void ParticleFilter::GetParticles(vector<Particle>* particles) const {
 }
 
 
+Vector2f ParticleFilter::GetRayIntersection(
+  const line2f& ray, float min_intersection_dist, const Vector2f& laser_point) {
+  // If there is no intersection with any lines in the map, the returned point is the
+  // max range of the laser ray.
+  Vector2f min_intersection_point = ray.p1;
+
+  // iterate over each line in the map and return shortest distance to interection point
+  for (int32_t i = 0; i < num_map_lines_; i++) {
+    const line2f& map_line = map_.lines[i];
+    Vector2f intersection_point; 
+
+    // redefine current_ray in terms of map coordinates??
+    bool intersects = map_line.Intersection(ray, &intersection_point);
+    if (intersects) {
+      // ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
+      float intersection_dist = (intersection_point - laser_point).norm(); 
+      if (intersection_dist <= min_intersection_dist){
+        min_intersection_dist = intersection_dist;
+        // min_intersection_point = intersection_point - laser_point; // from laser
+        min_intersection_point = intersection_point; // world frame
+      }
+    }
+  }
+  return min_intersection_point;
+}
+
+
+
 void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
                                             const float angle,
-                                            float num_ranges,
+                                            int32_t num_rays,
                                             float range_min,
                                             float range_max,
                                             float angle_min,
                                             float angle_max,
-                                            vector<Vector2f>* scan_ptr) {
+                                            vector<Vector2f>* scan_ptr,
+                                            int32_t range_incr) {
   vector<Vector2f>& scan = *scan_ptr;
   // Compute what the predicted point cloud would be, if the car was at the pose
   // loc, angle, with the sensor characteristics defined by the provided
@@ -179,79 +206,23 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
   // This is NOT the motion model predict step: it is the prediction of the
   // expected observations, to be used for the update step.
 
-  const float angle_inc = (angle_max - angle_min) / num_ranges;
-  scan.resize(int(num_ranges));
+  const float angle_inc = (angle_max - angle_min) / num_rays;
+  scan.resize(num_rays);
 
   float max_ray_range = 10.0;
 
   //iterate over each ray from laser
-  for (int i = 0; i < int(num_ranges); ++i) {
+  Vector2f laser_point = Vector2f(loc.x() + kLaserLoc.x(), loc.y() + kLaserLoc.y());
+  for (int i = 0; i < num_rays; i += range_incr) {
     float current_angle = i * angle_inc + angle_min + angle;
-    Vector2f laser_point = Vector2f(loc.x() + kLaserLoc.x(), loc.y() + kLaserLoc.y());
     // current_ray is defined using odometry x and y
     Vector2f ray_end_point = Vector2f(loc.x() + max_ray_range * cos(current_angle), loc.y() + max_ray_range * sin(current_angle));
     line2f current_ray(laser_point.x(), laser_point.y(), ray_end_point.x(), ray_end_point.y()); 
-    float min_intersection_dist = max_ray_range; 
-    Vector2f min_intersection_point = current_ray.p1;
-
-    // iterate over each line in the map and return shortest distance to interection point
-    for (size_t i = 0; i < map_.lines.size(); ++i) {
-      const line2f map_line = map_.lines[i];
-      Vector2f intersection_point; 
-
-      // redefine current_ray in terms of map coordinates??
-      bool intersects = map_line.Intersection(current_ray, &intersection_point);
-      if (intersects) {
-        // ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
-        float intersection_dist = (intersection_point - laser_point).norm(); 
-        if (intersection_dist <= min_intersection_dist){
-          min_intersection_dist = intersection_dist;
-          // min_intersection_point = intersection_point - laser_point; // from laser
-          min_intersection_point = intersection_point; // world frame
-        }
-      } else {
-        // ROS_INFO("No intersection");
-      }
-    }
-
-    scan[i] = min_intersection_point; 
+    scan[i] = GetRayIntersection(current_ray, max_ray_range, laser_point);
   }
-  
 }
 
-void ParticleFilter::GetObservedPointCloud(const Vector2f& loc,
-                                           const float angle,
-                                           const vector<float>& ranges,
-                                           float num_ranges,
-                                           float range_min,
-                                           float range_max,
-                                           float angle_min,
-                                           float angle_max,
-                                           vector<Vector2f>* obs_scan_ptr) {
-  
-  vector<Vector2f>& obs_scan = *obs_scan_ptr;
-  obs_scan.resize(int(num_ranges));
-  Vector2f laser_point = Vector2f(loc.x() + kLaserLoc.x(), loc.y() + kLaserLoc.y());
-
-  const float index_inc = (ranges.size() / (num_ranges - 1));
-  const float angle_inc = (angle_max - angle_min) / (num_ranges - 1);
-  // ROS_INFO("ranges.size() = %ld", ranges.size());
-  // ROS_INFO("num_ranges = %f", num_ranges);
-  // ROS_INFO("angle_min = %f", angle_min);
-  // ROS_INFO("angle_max = %f", angle_max);
-  // ROS_INFO("index_inc = %f", index_inc);
-  // ROS_INFO("angle_inc = %f", angle_inc);
-  for (int i = 0; i < int(num_ranges); i++){
-    // ROS_INFO("(i * index_inc) = %d", int(i * index_inc));
-    // ROS_INFO("angle = i * angle_inc + angle_min = %f", i * angle_inc + angle_min);
-    float current_angle = i * angle_inc + angle_min;
-    obs_scan[i] = laser_point + Vector2f(ranges[int(i * index_inc)] * cos(current_angle), ranges[int(i * index_inc)] * sin(current_angle));
-  }
-
-
-}
-
-double Observe_Likelihood(double s_t_i, double pred_s_t_i, float s_min, float s_max, float d_short, float d_long, float sigma, float gamma){
+double ObserveLikelihood(double s_t_i, double pred_s_t_i, float s_min, float s_max, float d_short, float d_long, float sigma, float gamma){
   if ((s_t_i < s_min) || (s_t_i > s_max)) {
     ROS_INFO("OL Branch: obs point not possible to see");
     return 0;
@@ -270,40 +241,37 @@ double Observe_Likelihood(double s_t_i, double pred_s_t_i, float s_min, float s_
   }
 }
 
-struct bin{
-  double lower_bound;
-  double upper_bound;
-};
-
-void PrintBins(std::vector<bin> bins){
+void PrintBins(const std::vector<WeightBin>& bins){
   ROS_INFO("----------------------");
   for (int i = 0; i < int(bins.size()); i++){
     ROS_INFO("[%d]: l = %f, u = %f", i, bins[i].lower_bound, bins[i].upper_bound);
   }
 }
 
-// update p_ptr->weight based on comparisons of predictedpointcloud with observedpointcloud
+// update p_ptr->weight based on comparisons of predictedpointcloud with observedpoint cloud
 void ParticleFilter::Update(const vector<float>& ranges,
                             float range_min,
                             float range_max,
                             float angle_min,
                             float angle_max,
                             Particle* p_ptr) {
-  
+
+  // Get the predicted point cloud from the perspective of this point.
   vector<Vector2f> pred_scan;
-  float num_ranges = ranges.size() / 10.0;  // some of the ranges
-  GetPredictedPointCloud(p_ptr->loc, p_ptr->angle, num_ranges, range_min, range_max, angle_min, angle_max, &pred_scan);
-
-  vector<Vector2f> observed_scan;
-  GetObservedPointCloud(p_ptr->loc, p_ptr->angle, ranges, num_ranges, range_min, range_max, angle_min, angle_max, &observed_scan);
-
+  int32_t ray_skip = 10;
+  GetPredictedPointCloud(
+    p_ptr->loc, p_ptr->angle, (int32_t)(ranges.size() / ray_skip), range_min,
+    range_max, angle_min, angle_max, &pred_scan);
+      
   double p_s_t = 0.0;
-  // for the given particle
-  // for each predicted ray, compare to corresponding observed ray
-  for (int i = 0; i < int(num_ranges); ++i) {
-    double pred_s_t_i = ((p_ptr->loc + kLaserLoc) - pred_scan[i]).norm(); 
-    double s_t_i = ((p_ptr->loc + kLaserLoc) - observed_scan[i]).norm();
-    double ol = Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma, CONFIG_gamma);
+
+  // Loop over all the rays and find the difference between the predicted distance and
+  // the actual observed distance.
+  int32_t num_pred_rays = (int32_t)pred_scan.size();
+  for (int32_t i = 0; i < num_pred_rays; ++i) {
+    double pred_s_t_i = pred_scan[i].norm(); 
+    double s_t_i = ranges.at(i * ray_skip);
+    double ol = ObserveLikelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma, CONFIG_gamma);
     double log_ol;
     if (ol == 0.0) {
       continue;
@@ -321,40 +289,32 @@ void ParticleFilter::Update(const vector<float>& ranges,
 
 void ParticleFilter::Resample() {
   // Resample the particles, proportional to their weights.
-  // caculate total_sum of all weights in particles
-
-  // create bins data structure vector<bin>
-  std::vector<bin> bins(particles_.size());
+  // calculate total_sum of all weights in particles
 
   double start_width = 0.0;
-  int p_i = 0;
-  // update bins with particle weights as min_max
-  for (auto& bin : bins){
-    bin.lower_bound = start_width;
-    bin.upper_bound = bin.lower_bound + particles_[p_i].weight;
-    p_i++;
-    start_width = bin.upper_bound;
+  for (int32_t i = 0; i < num_particles_; i++) {
+    weight_bins_[i].lower_bound = start_width;
+    weight_bins_[i].upper_bound = weight_bins_[i].lower_bound + particles_[i].weight;
+    start_width = weight_bins_[i].upper_bound;
   }
 
-  PrintBins(bins);
-
-  std::vector<Particle> particles_copy_;
+  PrintBins(weight_bins_);
   
   // for every particle,
-  for (int i = 0; i < int(particles_.size()); i++){
+  for (int32_t i = 0; i < num_particles_; i++){
     // pick a random number between 0 - total width
-    float x = rng_.UniformRandom(0, (bins.end()--)->upper_bound);
+    float x = rng_.UniformRandom(0, (weight_bins_.end()--)->upper_bound);
 
     // get the index of bins which x falls into
-    for (int j = 0; j < int(bins.size()); j++) {
-      if (bins[j].lower_bound <= x && x <= bins[j].upper_bound) {
-        particles_copy_.push_back(particles_[j]);
-        particles_copy_[i].weight = 1.0;
+    for (int32_t j = 0; j < num_particles_; j++) {
+      if (weight_bins_[j].lower_bound <= x && x <= weight_bins_[j].upper_bound) {
+        resampled_particles_[i] = particles_[j];
+        resampled_particles_[i].reset_weight();
       }
     }
   }
 
-  particles_ = particles_copy_;
+  particles_ = resampled_particles_;
 
 }
 
@@ -363,35 +323,22 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float range_max,
                                   float angle_min,
                                   float angle_max) {
-  // A new laser scan observation is available (in the laser frame)
   
-  for (auto& particle : particles_){
+  double max_weight = 0.0;
+  for (auto& particle : particles_) {
+    // Only update and resample if the particle has moved more than 0.15cm.
     if ((particle.prev_update_loc - particle.loc).norm() >= 0.15) {
+
       Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
       particle.prev_update_loc = particle.loc;
-
-      double w_max = GetMaxWeight();
-      for (auto& particle : particles_){
-        particle.normalize_weight(w_max);
-      }
-      PrintParticles();
-
-      if (rng_.UniformRandom(0.0, 1.0) <= 1.0) {
-        Resample();
-      }
-
     }
+    max_weight = particle.weight > max_weight ? particle.weight : max_weight;
   }
-
-  
-}
-
-double ParticleFilter::GetMaxWeight() {
-  double result = 0;
   for (auto& particle : particles_) {
-    result = particle.weight > result ? particle.weight : result;
+    particle.normalize_weight(max_weight);
   }
-  return result;
+  //PrintParticles();
+  Resample();
 }
 
 
@@ -420,24 +367,31 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
 void ParticleFilter::Initialize(const string& map_file,
                                 const Vector2f& loc,
                                 const float angle) {
+
   // The "set_pose" button on the GUI was clicked, or an initialization message
   // was received from the log. Initialize the particles accordingly, e.g. with
   // some distribution around the provided location and angle.
   map_.Load(map_file);
+  num_map_lines_ = (int32_t)map_.lines.size();
 
-  // Initialize the particles of size num_particles
-  particles_ = std::vector<Particle>(FLAGS_num_particles);
+  // Set the number of particles being used in the simulation.
+  num_particles_ = (int32_t) FLAGS_num_particles;
+
+  // Initialize the objects that are solely depedent on the num_particles.
+  particles_ = std::vector<Particle>(num_particles_);
+  resampled_particles_ = std::vector<Particle>(num_particles_);
+  weight_bins_ = std::vector<WeightBin>(num_particles_);
 
   // Create randomly distributed particles around (init_x, init_y).
-  for (int i = 0; i < int(particles_.size()); i++){
-    float x = rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
-    float y = rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
-    float r = rng_.Gaussian(angle, CONFIG_init_r_stddev);
+  for (auto& particle : particles_) {
+    double x = rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
+    double y = rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
+    double r = rng_.Gaussian(angle, CONFIG_init_r_stddev);
 
-    particles_[i].loc = Vector2f(x, y);
-    particles_[i].angle = r;
-    particles_[i].weight = 1.0;
-    particles_[i].prev_update_loc = Vector2f(x, y);
+    particle.loc = Vector2f(x, y);
+    particle.angle = r;
+    particle.weight = 1.0;
+    particle.prev_update_loc = Vector2f(x, y);
   }
   
 }

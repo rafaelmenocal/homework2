@@ -19,33 +19,44 @@
 */
 //========================================================================
 
+#ifndef __SRC_PARTICLE_FILTER_H__
+#define __SRC_PARTICLE_FILTER_H__
+
 #include <algorithm>
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
-#include "shared/math/line2d.h"
+
+#include "shared/math/geometry.h"
 #include "shared/util/random.h"
 #include "vector_map/vector_map.h"
 #include "particle.h"
 
-#ifndef SRC_PARTICLE_FILTER_H_
-#define SRC_PARTICLE_FILTER_H_
 
 namespace particle_filter {
 
-// struct Particle {
-//   Eigen::Vector2f loc;
-//   float angle;
-//   double weight;
-// };
+struct WeightBin{
+  double lower_bound;
+  double upper_bound;
+};
+
 
 class ParticleFilter {
  public:
   // Default Constructor.
    ParticleFilter();
 
-  // Observe a new laser scan.
+  /*
+   * Get the new laser scan from the LIDAR and start the particle filter update and
+   * resampling algorithm.
+   *
+   * @param ranges: the distances found along each LIDAR ray
+   * @param range_min: the minimum range of the LIDAR
+   * @param range_max: the maximum range of the LIDAR
+   * @param angle_min: the starting angle of the LIDAR reading
+   * @param angle_max: the ending angle of the LIDAR reading
+   */
   void ObserveLaser(const std::vector<float>& ranges,
                     float range_min,
                     float range_max,
@@ -56,7 +67,14 @@ class ParticleFilter {
   void Predict(const Eigen::Vector2f& odom_loc,
                        const float odom_angle);
 
-  // Initialize the robot location.
+  /*
+   * Initialize the particle filter based on the robots current location. Also
+   * initialize all the structures dependent on the num_particles.
+   *
+   * @param map_file: the map file to load for simulation
+   * @param loc: the location of the robot set in the GUI
+   * @param angle: the angle of the robot's initial pose
+   */
   void Initialize(const std::string& map_file,
                   const Eigen::Vector2f& loc,
                   const float angle);
@@ -85,38 +103,64 @@ class ParticleFilter {
   // Print particles
   void PrintParticles();
 
-  // Get Max Weight of all particles
-  double GetMaxWeight();
-
-  // For debugging: get predicted point cloud from current location.
+  /*
+   * Given the location and angle of a particle and a potential ray from the LIDAR, find
+   * where this ray would intersect with the map.
+   *
+   * @param loc:
+   * @param range_min:
+   * @param range_max:
+   * @param angle_min:
+   * @param angle_max:
+   * @param: obs_scan_ptr
+   */
   void GetPredictedPointCloud(const Eigen::Vector2f& loc,
                               const float angle,
-                              float num_ranges,
+                              int32_t num_ranges,
                               float range_min,
                               float range_max,
                               float angle_min,
                               float angle_max,
-                              std::vector<Eigen::Vector2f>* scan);
-
-void GetObservedPointCloud(const Eigen::Vector2f& loc,
-                           const float angle,
-                           const std::vector<float>& ranges,
-                           float num_ranges,
-                           float range_min,
-                           float range_max,
-                           float angle_min,
-                           float angle_max,
-                           std::vector<Eigen::Vector2f>* obs_scan_ptr);
+                              std::vector<Eigen::Vector2f>* scan,
+                              int32_t range_incr = 1);
+  /*
+   * Get the observed point cloud from the robots LIDAR.
+   *
+   * @param ranges:
+   * @param range_min:
+   * @param range_max:
+   * @param angle_min:
+   * @param angle_max:
+   * @param: obs_scan_ptr
+   */
+  void GetObservedPointCloud(const Eigen::Vector2f& loc,
+                            const float angle,
+                            const std::vector<float>& ranges,
+                            float range_min,
+                            float range_max,
+                            float angle_min,
+                            float angle_max,
+                            std::vector<Eigen::Vector2f>* obs_scan_ptr);
  private:
 
-  // List of particles being tracked.
+  // List of particles currently being tracked.
   std::vector<Particle> particles_;
+
+  // Keep an extra structure for managing the resampled particles
+  std::vector<Particle> resampled_particles_;
+
+  // Bounds on the weight bins per particle
+  std::vector<WeightBin> weight_bins_;
 
   // Map of the environment.
   vector_map::VectorMap map_;
+  int32_t num_map_lines_;
 
   // Random number generator.
   util_random::Random rng_;
+
+  // number of particles in the simulation. Supplied via command line.
+  int32_t num_particles_;
 
   // Previous odometry-reported locations.
   Eigen::Vector2f prev_odom_loc_;
@@ -137,7 +181,13 @@ void GetObservedPointCloud(const Eigen::Vector2f& loc,
   float del_odom_angle_;
   float odom_omega_;
 
+
+  Eigen::Vector2f GetRayIntersection(const geometry::line2f& ray,
+                                     float min_intersection_dist,
+                                     const Eigen::Vector2f& laser_point);
+
+
 };
 }  // namespace slam
 
-#endif   // SRC_PARTICLE_FILTER_H_
+#endif   // __SRC_PARTICLE_FILTER_H__
