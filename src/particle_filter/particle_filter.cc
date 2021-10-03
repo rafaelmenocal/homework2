@@ -324,21 +324,25 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_min,
                                   float angle_max) {
   
-  double max_weight = 0.0;
+  double max_weight = 0.0;  
   for (auto& particle : particles_) {
     // Only update and resample if the particle has moved more than 0.15cm.
     if ((particle.prev_update_loc - particle.loc).norm() >= 0.15) {
-
       Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
       particle.prev_update_loc = particle.loc;
     }
     max_weight = particle.weight > max_weight ? particle.weight : max_weight;
   }
+    
   for (auto& particle : particles_) {
     particle.normalize_weight(max_weight);
   }
+    
+  if (rng_.UniformRandom(0.0, 1.0) >= 0.5){
+    Resample();
+  }
   //PrintParticles();
-  Resample();
+
 }
 
 
@@ -357,9 +361,6 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
     particle.loc += odom_vel_ * del_time_ * Vector2f(cos(particle.angle), sin(particle.angle)) + tet + ter;
     particle.angle += odom_omega_ * del_time_ + ret + rer;
   }
-
-  // return how likely it is for each particle to be at the next location loc_hat, angle_hat
-  //     based on 1) starting location, 2) predicted location, 3) odometry
 
 }
 
@@ -390,7 +391,7 @@ void ParticleFilter::Initialize(const string& map_file,
 
     particle.loc = Vector2f(x, y);
     particle.angle = r;
-    particle.weight = 1.0;
+    particle.weight = 1.0; // /num_particles; ?
     particle.prev_update_loc = Vector2f(x, y);
   }
   

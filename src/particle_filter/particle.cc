@@ -31,7 +31,7 @@
     }
 
     void Particle::reset_weight() {
-        weight = 1.0;
+        weight = 1.0; // / num_particles; ?
     }
 
     void Particle::normalize_weight(double normalize_by) {
