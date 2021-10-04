@@ -377,24 +377,60 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_max) {
   // A new laser scan observation is available (in the laser frame)
   
+  // Initial method
+  // for (auto& particle : particles_){
+  //   if ((particle.prev_update_loc - particle.loc).norm() >= 0.15) {
+  //     Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
+  //     particle.prev_update_loc = particle.loc;
+
+  //     double w_max = GetMaxWeight();
+  //     for (auto& particle : particles_){
+  //       particle.normalize_weight(w_max);
+  //     }
+  //     PrintParticles();
+
+  //     if (rng_.UniformRandom(0.0, 1.0) <= 1.0) {
+  //       Resample();
+  //     }
+
+  //   }
+  // }
+
+  
+  // Alternate method
+  ROS_INFO("====particles before update======");
+  PrintParticles();
+  double w_max = 0.0;
+  int i = 0;
   for (auto& particle : particles_){
     if ((particle.prev_update_loc - particle.loc).norm() >= 0.15) {
+      ROS_INFO("Updating particle %d", i);
       Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
       particle.prev_update_loc = particle.loc;
-
-      double w_max = GetMaxWeight();
-      for (auto& particle : particles_){
-        particle.normalize_weight(w_max);
-      }
-      PrintParticles();
-
-      if (rng_.UniformRandom(0.0, 1.0) <= 1.0) {
-        Resample();
-      }
-
     }
+    i++;
   }
+  
+  // ROS_INFO("====particles after update======");
+  // PrintParticles();
+  ROS_INFO("w_max = %f", w_max);
+  w_max = GetMaxWeight();
+  ROS_INFO("w_max = %f", w_max);
 
+  // if (w_max != 0){
+  //   for (auto& particle : particles_){
+  //     particle.normalize_weight(w_max);
+  //   }
+  //   ROS_INFO("====particles after normalization======");
+  //   PrintParticles();
+  // }
+  
+  // if (rng_.UniformRandom(0.0, 1.0) <= 1.0) {
+  //   Resample();
+  // }
+
+  // ROS_INFO("====particles after resample======");
+  // PrintParticles();
   
 }
 
