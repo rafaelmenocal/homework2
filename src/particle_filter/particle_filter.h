@@ -18,27 +18,25 @@
 \author  Joydeep Biswas, (C) 2018
 */
 //========================================================================
+#ifndef __SRC_PARTICLE_FILTER_PARTICLE_FILTER_H__
+#define __SRC_PARTICLE_FILTER_H__
+
 
 #include <algorithm>
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
+
 #include "shared/math/line2d.h"
 #include "shared/util/random.h"
 #include "vector_map/vector_map.h"
+
 #include "particle.h"
 
-#ifndef SRC_PARTICLE_FILTER_H_
-#define SRC_PARTICLE_FILTER_H_
+
 
 namespace particle_filter {
-
-// struct Particle {
-//   Eigen::Vector2f loc;
-//   float angle;
-//   double weight;
-// };
 
 class ParticleFilter {
  public:
@@ -140,6 +138,6 @@ void GetObservedPointCloud(//const Eigen::Vector2f& loc,
   float odom_omega_;
 
 };
-}  // namespace slam
+}  // namespace particle_filter
 
-#endif   // SRC_PARTICLE_FILTER_H_
+#endif // __SRC_PARTICLE_FILTER_PARTICLE_FILTER_H__

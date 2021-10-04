@@ -19,30 +19,26 @@
 */
 //========================================================================
 
+#include "particle_filter.h"
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+
+#include "config_reader/config_reader.h"
+#include "ros/ros.h"
 #include "shared/math/geometry.h"
 #include "shared/math/line2d.h"
 #include "shared/math/math_util.h"
 #include "shared/util/timer.h"
-#include "ros/ros.h"
-
-#include "config_reader/config_reader.h"
-#include "particle_filter.h"
-// #include "particle.h"
-
 #include "vector_map/vector_map.h"
 
 using geometry::line2f;
-using std::cout;
-using std::endl;
-using std::string;
-using std::swap;
 using std::vector;
 using Eigen::Vector2f;
 using Eigen::Vector2i;
@@ -466,7 +462,7 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
 }
 
 
-void ParticleFilter::Initialize(const string& map_file,
+void ParticleFilter::Initialize(const std::string& map_file,
                                 const Vector2f& loc,
                                 const float angle) {
   // The "set_pose" button on the GUI was clicked, or an initialization message

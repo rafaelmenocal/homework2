@@ -1,3 +1,7 @@
+#ifndef __SRC_PARTICLE_FILTER_PARTICLE_H__
+#define __SRC_PARTICLE_FILTER_PARTICLE_H__
+
+
 #include "particle.h"
 
 #include "ros/ros.h"
@@ -37,3 +41,5 @@
         loc += Eigen::Rotation2Df(angle) * (base_link_translation + Eigen::Vector2f(eps_x, eps_y));
         angle += ang_vel * del_time + eps_theta;
     }
+
+#endif //__SRC_PARTICLE_FILTER_PARTICLE_H__
