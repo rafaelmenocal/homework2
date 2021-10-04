@@ -77,7 +77,9 @@ class ParticleFilter {
               float range_max,
               float angle_min,
               float angle_max,
-              Particle* p);
+              Particle* p,
+              std::vector<Eigen::Vector2f>* obs_scan_ptr,
+              float num_ranges);
 
   // Resample particles.
   void Resample();
@@ -98,8 +100,8 @@ class ParticleFilter {
                               float angle_max,
                               std::vector<Eigen::Vector2f>* scan);
 
-void GetObservedPointCloud(const Eigen::Vector2f& loc,
-                           const float angle,
+void GetObservedPointCloud(//const Eigen::Vector2f& loc,
+                           //const float angle,
                            const std::vector<float>& ranges,
                            float num_ranges,
                            float range_min,

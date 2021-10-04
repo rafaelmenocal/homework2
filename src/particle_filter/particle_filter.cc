@@ -219,8 +219,8 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
   
 }
 
-void ParticleFilter::GetObservedPointCloud(const Vector2f& loc,
-                                           const float angle,
+void ParticleFilter::GetObservedPointCloud(//const Vector2f& loc,
+                                           //const float angle,
                                            const vector<float>& ranges,
                                            float num_ranges,
                                            float range_min,
@@ -231,7 +231,6 @@ void ParticleFilter::GetObservedPointCloud(const Vector2f& loc,
   
   vector<Vector2f>& obs_scan = *obs_scan_ptr;
   obs_scan.resize(int(num_ranges));
-  Vector2f laser_point = Vector2f(loc.x() + kLaserLoc.x(), loc.y() + kLaserLoc.y());
 
   const float index_inc = (ranges.size() / (num_ranges - 1));
   const float angle_inc = (angle_max - angle_min) / (num_ranges - 1);
@@ -245,7 +244,7 @@ void ParticleFilter::GetObservedPointCloud(const Vector2f& loc,
     // ROS_INFO("(i * index_inc) = %d", int(i * index_inc));
     // ROS_INFO("angle = i * angle_inc + angle_min = %f", i * angle_inc + angle_min);
     float current_angle = i * angle_inc + angle_min;
-    obs_scan[i] = laser_point + Vector2f(ranges[int(i * index_inc)] * cos(current_angle), ranges[int(i * index_inc)] * sin(current_angle));
+    obs_scan[i] = Vector2f(ranges[int(i * index_inc)] * cos(current_angle), ranges[int(i * index_inc)] * sin(current_angle));
   }
 
 
@@ -253,19 +252,19 @@ void ParticleFilter::GetObservedPointCloud(const Vector2f& loc,
 
 double Observe_Likelihood(double s_t_i, double pred_s_t_i, float s_min, float s_max, float d_short, float d_long, float sigma, float gamma){
   if ((s_t_i < s_min) || (s_t_i > s_max)) {
-    ROS_INFO("OL Branch: obs point not possible to see");
+    // ROS_INFO("OL Branch: obs point not possible to see");
     return 0;
   }
   else if (s_t_i < pred_s_t_i - d_short){
-    ROS_INFO("OL Branch: obs pt much closer than pred pt");
+    // ROS_INFO("OL Branch: obs pt much closer than pred pt");
     return pow(exp(-1 * pow(d_short, 2) / pow(sigma, 2)), gamma);
   }
   else if (s_t_i > pred_s_t_i + d_long){
-    ROS_INFO("OL Branch: obs pt much further than pred pt");
+    // ROS_INFO("OL Branch: obs pt much further than pred pt");
     return pow(exp(-1 * pow(d_long, 2) / pow(sigma, 2)), gamma);
   }
   else {
-    ROS_INFO("OL Branch: obs pt close than pred pt");
+    // ROS_INFO("OL Branch: obs pt close than pred pt");
     return pow(exp(-1 * pow(s_t_i - pred_s_t_i, 2) / pow(sigma, 2)), gamma);
   }
 }
@@ -288,21 +287,22 @@ void ParticleFilter::Update(const vector<float>& ranges,
                             float range_max,
                             float angle_min,
                             float angle_max,
-                            Particle* p_ptr) {
+                            Particle* p_ptr,
+                            vector<Vector2f>* obs_scan_ptr,
+                            float num_ranges) {
   
   vector<Vector2f> pred_scan;
-  float num_ranges = ranges.size() / 10.0;  // some of the ranges
   GetPredictedPointCloud(p_ptr->loc, p_ptr->angle, num_ranges, range_min, range_max, angle_min, angle_max, &pred_scan);
 
-  vector<Vector2f> observed_scan;
-  GetObservedPointCloud(p_ptr->loc, p_ptr->angle, ranges, num_ranges, range_min, range_max, angle_min, angle_max, &observed_scan);
+  vector<Vector2f>& observed_scan = *obs_scan_ptr;
+ 
 
   double p_s_t = 0.0;
   // for the given particle
   // for each predicted ray, compare to corresponding observed ray
   for (int i = 0; i < int(num_ranges); ++i) {
     double pred_s_t_i = ((p_ptr->loc + kLaserLoc) - pred_scan[i]).norm(); 
-    double s_t_i = ((p_ptr->loc + kLaserLoc) - observed_scan[i]).norm();
+    double s_t_i = (p_ptr->loc - observed_scan[i]).norm();
     double ol = Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma, CONFIG_gamma);
     double log_ol;
     if (ol == 0.0) {
@@ -340,7 +340,7 @@ void ParticleFilter::Resample() {
 
   std::vector<Particle> particles_copy_;
   
-  // // resample without low variance
+  // resample without low variance
   // for (int i = 0; i < int(particles_.size()); i++){
   //   // pick a random number between 0 - total width
   //   float x = rng_.UniformRandom(0, (bins.end()--)->upper_bound);
@@ -376,11 +376,15 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
                                   float angle_min,
                                   float angle_max) {
   // A new laser scan observation is available (in the laser frame)
-  
+  float num_ranges = ranges.size() / 10.0;  // some of the ranges
+
+  vector<Vector2f> observed_scan;
+  GetObservedPointCloud(ranges, num_ranges, range_min, range_max, angle_min, angle_max, &observed_scan);
+
   // Initial method
   // for (auto& particle : particles_){
   //   if ((particle.prev_update_loc - particle.loc).norm() >= 0.15) {
-  //     Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
+  //     Update(ranges, range_min, range_max, angle_min, angle_max, &particle, &observed_scan, num_ranges);
   //     particle.prev_update_loc = particle.loc;
 
   //     double w_max = GetMaxWeight();
@@ -400,37 +404,43 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   // Alternate method
   ROS_INFO("====particles before update======");
   PrintParticles();
+  float min_move_dist = 0.0;
   double w_max = 0.0;
   int i = 0;
   for (auto& particle : particles_){
-    if ((particle.prev_update_loc - particle.loc).norm() >= 0.15) {
+    if ((particle.prev_update_loc - particle.loc).norm() >= min_move_dist) {
       ROS_INFO("Updating particle %d", i);
-      Update(ranges, range_min, range_max, angle_min, angle_max, &particle);
+      Update(ranges, range_min, range_max, angle_min, angle_max, &particle, &observed_scan, num_ranges);
       particle.prev_update_loc = particle.loc;
+    } else{
+      ROS_INFO("article %d not updated", i);
     }
     i++;
   }
   
-  // ROS_INFO("====particles after update======");
-  // PrintParticles();
-  ROS_INFO("w_max = %f", w_max);
+  ROS_INFO("====particles after update======");
+  PrintParticles();
+  
   w_max = GetMaxWeight();
   ROS_INFO("w_max = %f", w_max);
 
-  // if (w_max != 0){
-  //   for (auto& particle : particles_){
-  //     particle.normalize_weight(w_max);
-  //   }
-  //   ROS_INFO("====particles after normalization======");
-  //   PrintParticles();
-  // }
+  if (w_max != 0){
+    for (auto& particle : particles_){
+      particle.normalize_weight(w_max);
+    }
+    ROS_INFO("====particles after normalization======");
+    PrintParticles();
+    if (rng_.UniformRandom(0.0, 1.0) <= 0.5) {
+      Resample();
+      ROS_INFO("====particles after resampling======");
+      PrintParticles();
+    } else{
+      ROS_INFO("====particles NOT resampled======");
+    }
+  } else{
+    ROS_INFO("====********w_max = 0 ??*******======");
+  }
   
-  // if (rng_.UniformRandom(0.0, 1.0) <= 1.0) {
-  //   Resample();
-  // }
-
-  // ROS_INFO("====particles after resample======");
-  // PrintParticles();
   
 }
 
