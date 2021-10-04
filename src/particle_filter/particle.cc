@@ -25,7 +25,7 @@
                                  float_t k3,
                                  float_t k4) {
         // See https://www.google.com/url?q=https://docs.google.com/presentation/d/1Iruny27A_EAhpjE8mgiPvW0W9W0RKwKQRN2HEII-r-Y/edit?usp%3Dsharing&sa=D&source=editors&ust=1633377832336000&usg=AOvVaw0KNSsPeo7QVKp14Gls5_0P
-        // slide 06
+        // slide 26-27
         Eigen::Vector2f base_link_translation = Eigen::Rotation2Df(-theta) * odom_velocity * del_time;                        
         float_t theta_magnitude = abs(theta);
         float_t translation_std = k1 * speed + k2 * theta_magnitude;
