@@ -39,7 +39,6 @@
 #include "vector_map/vector_map.h"
 
 using geometry::line2f;
-using std::vector;
 using Eigen::Vector2f;
 using Eigen::Vector2i;
 using vector_map::VectorMap;
@@ -139,93 +138,65 @@ ParticleFilter::ParticleFilter() :
     del_odom_angle_(0),
     odom_omega_(0) {}
 
-void ParticleFilter::GetParticles(vector<Particle>* particles) const {
+void ParticleFilter::GetParticles(std::vector<Particle>* particles) const {
   *particles = particles_;
 }
 
 
 void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
                                             const float angle,
-                                            float num_ranges,
+                                            int32_t num_rays,
                                             float range_min,
                                             float range_max,
                                             float angle_min,
                                             float angle_max,
-                                            vector<Vector2f>* scan_ptr) {
-  vector<Vector2f>& scan = *scan_ptr;
+                                            std::vector<Vector2f>* scan_ptr,
+                                            int32_t ray_interval) {
+  std::vector<Vector2f>& scan = *scan_ptr;
+  scan.resize((int)(1 + (num_rays / ray_interval)));
   // Compute what the predicted point cloud would be, if the car was at the pose
   // loc, angle, with the sensor characteristics defined by the provided
   // parameters.
   // This is NOT the motion model predict step: it is the prediction of the
   // expected observations, to be used for the update step.
 
-  const float angle_inc = (angle_max - angle_min) / num_ranges;
-  scan.resize(int(num_ranges));
+  const float max_ray_range = 10.0;
+  const float angle_inc = (angle_max - angle_min) / (num_rays / ray_interval);
 
-  float max_ray_range = 10.0;
-
-  //iterate over each ray from laser
-  for (int i = 0; i < int(num_ranges); ++i) {
+  // iterate over each ray from laser
+  for (int32_t i = 0; i < num_rays; i += ray_interval) {
     float current_angle = i * angle_inc + angle_min + angle;
-    Vector2f laser_point = Vector2f(loc.x() + kLaserLoc.x(), loc.y() + kLaserLoc.y());
-    // current_ray is defined using odometry x and y
-    Vector2f ray_end_point = Vector2f(loc.x() + max_ray_range * cos(current_angle), loc.y() + max_ray_range * sin(current_angle));
-    line2f current_ray(laser_point.x(), laser_point.y(), ray_end_point.x(), ray_end_point.y()); 
+    // The laser vector starts at the laster scanner which is kLaserLoc offest from the
+    // base link of the robot.
+    Vector2f ray_start_point = Vector2f(loc.x() + kLaserLoc.x(), 
+                                        loc.y() + kLaserLoc.y());
+    // The default end of the ray is the max length of the LIDAR.
+    Vector2f ray_end_point = ray_start_point + 
+                    (Vector2f(cos(current_angle), sin(current_angle)) * max_ray_range);
+    // Create the ray line2f object
+    line2f current_ray(ray_start_point.x(), ray_start_point.y(),
+                      ray_end_point.x(), ray_end_point.y());
+
     float min_intersection_dist = max_ray_range; 
     Vector2f min_intersection_point = current_ray.p1;
 
     // iterate over each line in the map and return shortest distance to interection point
-    for (size_t i = 0; i < map_.lines.size(); ++i) {
-      const line2f map_line = map_.lines[i];
+    int32_t num_map_lines = (int32_t)map_.lines.size();
+    for (int32_t j = 0; j < num_map_lines; j++) {
       Vector2f intersection_point; 
+      bool intersects = map_.lines[j].Intersection(current_ray, &intersection_point);
 
-      // redefine current_ray in terms of map coordinates??
-      bool intersects = map_line.Intersection(current_ray, &intersection_point);
       if (intersects) {
-        // ROS_INFO("Intersects at (%f, %f)", intersection_point.x(), intersection_point.y());
-        float intersection_dist = (intersection_point - laser_point).norm(); 
+        float intersection_dist = (intersection_point - ray_start_point).norm(); 
         if (intersection_dist <= min_intersection_dist){
           min_intersection_dist = intersection_dist;
-          // min_intersection_point = intersection_point - laser_point; // from laser
           min_intersection_point = intersection_point; // world frame
         }
-      } else {
-        // ROS_INFO("No intersection");
       }
     }
-
-    scan[i] = min_intersection_point; 
+    scan[int(i / ray_interval)] = min_intersection_point;
   }
   
-}
-
-void ParticleFilter::GetObservedPointCloud(const vector<float>& ranges,
-                                           float num_ranges,
-                                           float range_min,
-                                           float range_max,
-                                           float angle_min,
-                                           float angle_max,
-                                           vector<Vector2f>* obs_scan_ptr) {
-  
-  vector<Vector2f>& obs_scan = *obs_scan_ptr;
-  obs_scan.resize(int(num_ranges));
-
-  const float index_inc = (ranges.size() / (num_ranges - 1));
-  const float angle_inc = (angle_max - angle_min) / (num_ranges - 1);
-  // ROS_INFO("ranges.size() = %ld", ranges.size());
-  // ROS_INFO("num_ranges = %f", num_ranges);
-  // ROS_INFO("angle_min = %f", angle_min);
-  // ROS_INFO("angle_max = %f", angle_max);
-  // ROS_INFO("index_inc = %f", index_inc);
-  // ROS_INFO("angle_inc = %f", angle_inc);
-  for (int i = 0; i < int(num_ranges); i++){
-    // ROS_INFO("(i * index_inc) = %d", int(i * index_inc));
-    // ROS_INFO("angle = i * angle_inc + angle_min = %f", i * angle_inc + angle_min);
-    float current_angle = i * angle_inc + angle_min;
-    obs_scan[i] = Vector2f(ranges[int(i * index_inc)] * cos(current_angle), ranges[int(i * index_inc)] * sin(current_angle));
-  }
-
-
 }
 
 double Observe_Likelihood(double s_t_i, double pred_s_t_i, float s_min, float s_max, float d_short, float d_long, float sigma, float gamma){
@@ -255,26 +226,26 @@ void PrintBins(std::vector<WeightBin> bins) {
 }
 
 // update p_ptr->weight based on comparisons of predictedpointcloud with observedpointcloud
-void ParticleFilter::Update(const vector<float>& ranges,
+void ParticleFilter::Update(const std::vector<float>& ranges,
                             float range_min,
                             float range_max,
                             float angle_min,
                             float angle_max,
                             Particle* p_ptr,
-                            vector<Vector2f>* obs_scan_ptr,
-                            float num_ranges) {
+                            int32_t ray_interval) {
   
-  vector<Vector2f> pred_scan;
-  GetPredictedPointCloud(p_ptr->loc, p_ptr->angle, num_ranges, range_min, range_max, angle_min, angle_max, &pred_scan);
 
-  vector<Vector2f>& observed_scan = *obs_scan_ptr;
+  std::vector<Vector2f> pred_scan;
+  GetPredictedPointCloud(p_ptr->loc, p_ptr->angle, (int32_t)ranges.size(), range_min,
+                         range_max, angle_min, angle_max, &pred_scan, ray_interval);
  
   double p_s_t = 0.0;
   // for the given particle
   // for each predicted ray, compare to corresponding observed ray
-  for (int i = 0; i < int(num_ranges); ++i) {
+  int32_t num_predicted_rays = (int32_t)pred_scan.size();
+  for (int32_t i = 0; i < num_predicted_rays; i++) {
     double pred_s_t_i = (p_ptr->loc + kLaserLoc - pred_scan[i]).norm(); 
-    double s_t_i = observed_scan[i].norm();
+    double s_t_i = ranges[i * ray_interval];
     double ol = Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma, CONFIG_gamma);
     double log_ol;
     if (ol == 0.0) {
@@ -305,32 +276,30 @@ void ParticleFilter::Resample() {
   PrintBins(weight_bins_);
   
   // Resample with low variance
-  float_t x = rng_.UniformRandom(0, ((weight_bins_.end()--)->upper_bound) / FLAGS_num_particles);
-  for (int32_t i = 0; i < num_particles_; i++) {
-      for (int32_t j = 0; j < num_particles_; j++) {
-        float_t sample = x * (j + 1);
-        if (weight_bins_[j].lower_bound <= sample && sample <= weight_bins_[j].upper_bound) {
-          resampled_particles_[i] = particles_[j];
-          resampled_particles_[i].reset_weight();
-        }
+  float_t r = rng_.UniformRandom(0, 1 / num_particles_);
+  float_t c = particles_[0].weight;
+  int i = 0;
+
+  for (int32_t m = 0; m < num_particles_; m++) {
+    float_t u = r + m * (1.0 / num_particles_);
+    while (c < u) {
+      i += 1;
+      c += particles_[i].weight;
     }
+    resampled_particles_[m] = particles_[i];
   }
+
   // Swap the newly sampled particles with the original (avoiding copy)
   std::swap(particles_, resampled_particles_);
 
 }
 
-void ParticleFilter::ObserveLaser(const vector<float>& ranges,
+void ParticleFilter::ObserveLaser(const std::vector<float>& ranges,
                                   float range_min,
                                   float range_max,
                                   float angle_min,
                                   float angle_max) {
-  // A new laser scan observation is available (in the laser frame)
-  float num_ranges = ranges.size() / 10.0;  // some of the ranges
 
-  vector<Vector2f> observed_scan;
-  GetObservedPointCloud(ranges, num_ranges, range_min, range_max, angle_min, angle_max, &observed_scan);
-  
   // Alternate method
   ROS_INFO("====particles before update======");
   PrintParticles();
@@ -340,7 +309,7 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   for (auto& particle : particles_) {
     if ((particle.prev_update_loc - particle.loc).norm() >= min_move_dist) {
       ROS_INFO("Updating particle %d", i);
-      Update(ranges, range_min, range_max, angle_min, angle_max, &particle, &observed_scan, num_ranges);
+      Update(ranges, range_min, range_max, angle_min, angle_max, &particle, int32_t(10));
       particle.prev_update_loc = particle.loc;
     } else{
       ROS_INFO("article %d not updated", i);
@@ -360,7 +329,7 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
     }
     ROS_INFO("====particles after normalization======");
     PrintParticles();
-    if (rng_.UniformRandom(0.0, 1.0) <= 0.5) {
+    if (rng_.UniformRandom(0.0, 1.0) <= 0.95) {
       Resample();
       ROS_INFO("====particles after resampling======");
       PrintParticles();
