@@ -1,66 +1,39 @@
 #include "particle.h"
 
-    //Functions to change this function's location and angle
+#include "ros/ros.h"
 
-    //This function returns the change in x and y location, and internally updates the angle
-    int Particle::update_position(float_t speed, double del_time, float_t ang_vel) {
-        return 0;
+
+    void Particle::calc_weight() {
+        weight = 3;
     }
 
-    // Eigen::Vector2f Particle::get_del_loc(float_t speed, double del_time, float_t ang_vel) {
-    //     Eigen::Vector2f vel = Eigen::Vector2f(cos(angle) * speed, sin(angle) * speed);
-    //     Eigen::Vector2f result = loc + (vel * del_time);
-    //     result += trans_err_trans(speed, del_time);
-    //     result += trans_err_rot(ang_vel, del_time);
-    //     return result;
-    // }
-
-    float_t Particle::get_del_angle(float_t speed, double del_time, float_t ang_vel) {
-        //Right now, we aren't turning. EDIT THIS eventually.
-    //     float_t angle = Eigen::Vector2f(cos(angle) * speed, sin(angle) * speed);
-    //     float_t result = loc + (vel * del_time);
-    //     result += trans_err_trans(speed, del_time);
-    //     result += trans_err_rot(ang_vel, del_time);
-    //     return result;
-        return 0;
+    void Particle::reset_weight() {
+        weight = 1;
+    }
+    void Particle::normalize_weight(double normalize_by) {
+        weight /= normalize_by;
     }
 
-    double Particle::calc_weight() {
-        weight = 3; //EDIT THIS
-        return 0;
-    }
+    void Particle::model_movement(Eigen::Vector2f odom_velocity,
+                                 float_t speed,
+                                 float_t ang_vel,
+                                 float_t theta,
+                                 float_t del_time,
+                                 util_random::Random& rng,
+                                 float_t k1,
+                                 float_t k2,
+                                 float_t k3,
+                                 float_t k4) {
+        // See https://www.google.com/url?q=https://docs.google.com/presentation/d/1Iruny27A_EAhpjE8mgiPvW0W9W0RKwKQRN2HEII-r-Y/edit?usp%3Dsharing&sa=D&source=editors&ust=1633377832336000&usg=AOvVaw0KNSsPeo7QVKp14Gls5_0P
+        // slide 06
+        Eigen::Vector2f base_link_translation = Eigen::Rotation2Df(-theta) * odom_velocity * del_time;                        
+        float_t theta_magnitude = abs(theta);
+        float_t translation_std = k1 * speed + k2 * theta_magnitude;
 
-    double Particle::reset_weight() {
-        weight = 1; //EDIT THIS maybe, though if this is a good default weight, it's actually fine
-        return 0;
-    }
-    double Particle::normalize_weight(double normalize_by) {
-        weight /= normalize_by; //Now, how we get the value to normalize by, I'm not sure
-        return 0;
-    }
+        float_t eps_x = rng.Gaussian(0, translation_std);
+        float_t eps_y = rng.Gaussian(0, translation_std);
+        float_t eps_theta = rng.Gaussian(0, k3 * speed + k4 * theta_magnitude);
 
-    Eigen::Vector2f Particle::trans_err_trans(
-        float_t speed, double del_time, util_random::Random& rng, float_t k1) {
-        double del_trans = speed * del_time;
-        double result = rng.Gaussian(0, del_trans * k1);
-        return Eigen::Vector2f(cos(angle), sin(angle)) * result;
-    }
-
-    Eigen::Vector2f Particle::trans_err_rot(
-        float_t ang_vel, double del_time, util_random::Random& rng, float_t k2) {
-        double del_rot = abs(ang_vel * del_time);
-        double result = rng.Gaussian(0, del_rot * k2);
-        return Eigen::Vector2f(cos(angle), sin(angle)) * result;
-    }
-
-    float_t Particle::rot_err_rot(float_t ang_vel, double del_time, util_random::Random& rng, float_t k3) {
-        double del_rot = abs(ang_vel * del_time);
-        double result = rng.Gaussian(0, del_rot * k3);
-        return result;
-    }
-
-    float_t Particle::rot_err_trans(float_t speed, double del_time, util_random::Random& rng, float_t k4) {
-        double del_trans = speed * del_time;
-        double result = rng.Gaussian(0, del_trans * k4);
-        return result;
+        loc += Eigen::Rotation2Df(angle) * (base_link_translation + Eigen::Vector2f(eps_x, eps_y));
+        angle += ang_vel * del_time + eps_theta;
     }

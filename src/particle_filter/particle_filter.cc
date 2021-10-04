@@ -459,19 +459,10 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   UpdateOdometry(odom_loc, odom_angle);
 
   // here we will use motion model to predict location of particle at next time step
-  for (auto& particle : particles_){
-    Eigen::Vector2f tet = particle.trans_err_trans(odom_vel_, del_time_, rng_, CONFIG_k1);
-    Eigen::Vector2f ter = particle.trans_err_rot(odom_omega_, del_time_, rng_, CONFIG_k1);
-    float_t rer = particle.rot_err_rot(odom_omega_, del_time_, rng_, CONFIG_k3);
-    float_t ret = particle.rot_err_rot(odom_vel_, del_time_, rng_, CONFIG_k4);
-
-    particle.loc += odom_vel_ * del_time_ * Vector2f(cos(particle.angle), sin(particle.angle)) + tet + ter;
-    particle.angle += odom_omega_ * del_time_ + ret + rer;
+  //float_t velocity_sign = ();
+  for (auto& particle : particles_) {
+    particle.model_movement(odom_vel2f_, odom_vel_, odom_omega_, prev_odom_angle_ ,del_time_, rng_, CONFIG_k1, CONFIG_k2, CONFIG_k3, CONFIG_k4);
   }
-
-  // return how likely it is for each particle to be at the next location loc_hat, angle_hat
-  //     based on 1) starting location, 2) predicted location, 3) odometry
-
 }
 
 
