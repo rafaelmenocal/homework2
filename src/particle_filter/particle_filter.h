@@ -19,7 +19,7 @@
 */
 //========================================================================
 #ifndef __SRC_PARTICLE_FILTER_PARTICLE_FILTER_H__
-#define __SRC_PARTICLE_FILTER_H__
+#define __SRC_PARTICLE_FILTER_PARTICLE_FILTER_H__
 
 
 #include <algorithm>
@@ -35,8 +35,14 @@
 #include "particle.h"
 
 
-
 namespace particle_filter {
+
+
+struct WeightBin {
+  float_t lower_bound;
+  float_t upper_bound;
+};
+
 
 class ParticleFilter {
  public:
@@ -66,7 +72,13 @@ class ParticleFilter {
   // Return the list of particles.
   void GetParticles(std::vector<Particle>* particles) const;
 
-  // Get robot's current location.
+  /*
+   * Loop over all the particles and get the average position and angle.
+   * This is deemed the orientiation of the robot by the particles.
+   * 
+   * @param loc: the vector to fill with the average x and y location
+   * @param angle: the average angle of all the particles.
+   */
   void GetLocation(Eigen::Vector2f* loc, float* angle) const;
 
   // Update particle weight based on laser.
@@ -98,9 +110,7 @@ class ParticleFilter {
                               float angle_max,
                               std::vector<Eigen::Vector2f>* scan);
 
-void GetObservedPointCloud(//const Eigen::Vector2f& loc,
-                           //const float angle,
-                           const std::vector<float>& ranges,
+void GetObservedPointCloud(const std::vector<float>& ranges,
                            float num_ranges,
                            float range_min,
                            float range_max,
@@ -111,6 +121,15 @@ void GetObservedPointCloud(//const Eigen::Vector2f& loc,
 
   // List of particles being tracked.
   std::vector<Particle> particles_;
+
+  // Keep an extra structure for managing the resampled particles
+  std::vector<Particle> resampled_particles_;
+
+  // Bounds on the weight bins per particle
+  std::vector<WeightBin> weight_bins_;
+
+  // number of particles in the simulation. Supplied via command line.
+  int32_t num_particles_;
 
   // Map of the environment.
   vector_map::VectorMap map_;
@@ -136,6 +155,24 @@ void GetObservedPointCloud(//const Eigen::Vector2f& loc,
   float odom_accel_;
   float del_odom_angle_;
   float odom_omega_;
+
+  // A few small helper functions.
+  inline float_t Vel2fToVel() const {
+    return sqrt(pow(odom_vel2f_.x(), 2) + pow(odom_vel2f_.y(), 2));
+  };
+
+  inline float_t Accel2fToAccel() const {
+    return sqrt(pow(odom_accel2f_.x(), 2) + pow(odom_accel2f_.y(), 2));
+  }
+
+  inline Eigen::Vector2f GetOdomVel2f() const {
+    return (1.0 / del_time_) * 
+      Eigen::Vector2f(curr_odom_loc_.x() - prev_odom_loc_.x(), curr_odom_loc_.y() - prev_odom_loc_.y());
+  }
+
+  inline Eigen::Vector2f GetOdomAccel2f() const {
+    return (prev_odom_vel2f_ - odom_vel2f_) * del_time_;
+}
 
 };
 }  // namespace particle_filter

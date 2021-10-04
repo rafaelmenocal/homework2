@@ -1,3 +1,7 @@
+
+#ifndef __SRC_PARTICLE_FILTER_PARTICLE_H__
+#define __SRC_PARTICLE_FILTER_PARTICLE_H__
+
 #include "eigen3/Eigen/Dense"
 
 #include "shared/util/random.h"
@@ -32,3 +36,5 @@ class Particle {
                             float_t k4);
 
 };
+
+#endif // __SRC_PARTICLE_FILTER_PARTICLE_H__

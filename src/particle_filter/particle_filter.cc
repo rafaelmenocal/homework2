@@ -74,22 +74,6 @@ void ParticleFilter::PrintParticles(){
   }
 }
 
-float Vel2f_To_Vel(const Vector2f& velocity) {
-  return sqrt(pow(velocity.x(), 2) + pow(velocity.y(), 2));
-}
-
-float Accel2f_To_Accel(const Vector2f& accel) {
-  return sqrt(pow(accel.x(), 2) + pow(accel.y(), 2));
-}
-
-Vector2f GetOdomVel2f(const Vector2f& last_loc, const Vector2f& current_loc, float del_time) {
-  return (1/ del_time) * Vector2f(current_loc.x() - last_loc.x(), current_loc.y() - last_loc.y());
-}
-
-Vector2f GetOdomAccel2f(const Vector2f& last_vel, const Vector2f& current_vel, float del_time) {
-  return (last_vel - current_vel) * del_time;
-}
-
 void ParticleFilter::UpdateOdometry(const Vector2f& odom_loc,
                                     const float odom_angle){
   if (!odom_initialized_) {
@@ -103,10 +87,10 @@ void ParticleFilter::UpdateOdometry(const Vector2f& odom_loc,
   curr_odom_angle_ = odom_angle;
   curr_time_ = ros::Time::now().toSec();
   del_time_ = curr_time_ - prev_time_;
-  odom_vel2f_ = GetOdomVel2f(prev_odom_loc_, curr_odom_loc_, del_time_);
-  odom_accel2f_ = GetOdomAccel2f(prev_odom_vel2f_, odom_vel2f_, del_time_);
-  odom_vel_ = Vel2f_To_Vel(odom_vel2f_);
-  odom_accel_ = Accel2f_To_Accel(odom_accel2f_);
+  odom_vel2f_ = GetOdomVel2f();
+  odom_accel2f_ = GetOdomAccel2f();
+  odom_vel_ = Vel2fToVel();
+  odom_accel_ = Accel2fToAccel();
   del_odom_angle_ = curr_odom_angle_ - prev_odom_angle_;
   odom_omega_ = del_odom_angle_ / del_time_;
 
@@ -215,9 +199,7 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
   
 }
 
-void ParticleFilter::GetObservedPointCloud(//const Vector2f& loc,
-                                           //const float angle,
-                                           const vector<float>& ranges,
+void ParticleFilter::GetObservedPointCloud(const vector<float>& ranges,
                                            float num_ranges,
                                            float range_min,
                                            float range_max,
@@ -265,12 +247,7 @@ double Observe_Likelihood(double s_t_i, double pred_s_t_i, float s_min, float s_
   }
 }
 
-struct bin{
-  double lower_bound;
-  double upper_bound;
-};
-
-void PrintBins(std::vector<bin> bins){
+void PrintBins(std::vector<WeightBin> bins) {
   ROS_INFO("----------------------");
   for (int i = 0; i < int(bins.size()); i++){
     ROS_INFO("[%d]: l = %f, u = %f", i, bins[i].lower_bound, bins[i].upper_bound);
@@ -292,13 +269,12 @@ void ParticleFilter::Update(const vector<float>& ranges,
 
   vector<Vector2f>& observed_scan = *obs_scan_ptr;
  
-
   double p_s_t = 0.0;
   // for the given particle
   // for each predicted ray, compare to corresponding observed ray
   for (int i = 0; i < int(num_ranges); ++i) {
-    double pred_s_t_i = ((p_ptr->loc + kLaserLoc) - pred_scan[i]).norm(); 
-    double s_t_i = (p_ptr->loc - observed_scan[i]).norm();
+    double pred_s_t_i = (p_ptr->loc + kLaserLoc - pred_scan[i]).norm(); 
+    double s_t_i = observed_scan[i].norm();
     double ol = Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma, CONFIG_gamma);
     double log_ol;
     if (ol == 0.0) {
@@ -317,52 +293,30 @@ void ParticleFilter::Update(const vector<float>& ranges,
 
 void ParticleFilter::Resample() {
   // Resample the particles, proportional to their weights.
-  // caculate total_sum of all weights in particles
-
-  // create bins data structure vector<bin>
-  std::vector<bin> bins(particles_.size());
+  // calculate total_sum of all weights in particles
 
   double start_width = 0.0;
-  int p_i = 0;
-  // update bins with particle weights as min_max
-  for (auto& bin : bins){
-    bin.lower_bound = start_width;
-    bin.upper_bound = bin.lower_bound + particles_[p_i].weight;
-    p_i++;
-    start_width = bin.upper_bound;
+  for (int32_t i = 0; i < num_particles_; i++) {
+    weight_bins_[i].lower_bound = start_width;
+    weight_bins_[i].upper_bound = weight_bins_[i].lower_bound + particles_[i].weight;
+    start_width = weight_bins_[i].upper_bound;
   }
 
-  PrintBins(bins);
-
-  std::vector<Particle> particles_copy_;
+  PrintBins(weight_bins_);
   
-  // resample without low variance
-  // for (int i = 0; i < int(particles_.size()); i++){
-  //   // pick a random number between 0 - total width
-  //   float x = rng_.UniformRandom(0, (bins.end()--)->upper_bound);
-
-  //   // get the index of bins which x falls into
-  //   for (int j = 0; j < int(bins.size()); j++) {
-  //     if (bins[j].lower_bound <= x && x <= bins[j].upper_bound) {
-  //       particles_copy_.push_back(particles_[j]);
-  //       particles_copy_[i].weight = 1.0;
-  //     }
-  //   }
-  // }
-
   // Resample with low variance
-  double x = rng_.UniformRandom(0, ((bins.end()--)->upper_bound) / FLAGS_num_particles);
-  for (int i = 0; i < int(particles_.size()); i++){
-      for (int j = 0; j < int(bins.size()); j++) {
-        double sample = x * (j + 1);
-        if (bins[j].lower_bound <= sample && sample <= bins[j].upper_bound) {
-          particles_copy_.push_back(particles_[j]);
-          particles_copy_[i].weight = 1.0; // /num_particles; ?
+  float_t x = rng_.UniformRandom(0, ((weight_bins_.end()--)->upper_bound) / FLAGS_num_particles);
+  for (int32_t i = 0; i < num_particles_; i++) {
+      for (int32_t j = 0; j < num_particles_; j++) {
+        float_t sample = x * (j + 1);
+        if (weight_bins_[j].lower_bound <= sample && sample <= weight_bins_[j].upper_bound) {
+          resampled_particles_[i] = particles_[j];
+          resampled_particles_[i].reset_weight();
         }
     }
   }
-
-  particles_ = particles_copy_;
+  // Swap the newly sampled particles with the original (avoiding copy)
+  std::swap(particles_, resampled_particles_);
 
 }
 
@@ -376,26 +330,6 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
 
   vector<Vector2f> observed_scan;
   GetObservedPointCloud(ranges, num_ranges, range_min, range_max, angle_min, angle_max, &observed_scan);
-
-  // Initial method
-  // for (auto& particle : particles_){
-  //   if ((particle.prev_update_loc - particle.loc).norm() >= 0.15) {
-  //     Update(ranges, range_min, range_max, angle_min, angle_max, &particle, &observed_scan, num_ranges);
-  //     particle.prev_update_loc = particle.loc;
-
-  //     double w_max = GetMaxWeight();
-  //     for (auto& particle : particles_){
-  //       particle.normalize_weight(w_max);
-  //     }
-  //     PrintParticles();
-
-  //     if (rng_.UniformRandom(0.0, 1.0) <= 1.0) {
-  //       Resample();
-  //     }
-
-  //   }
-  // }
-
   
   // Alternate method
   ROS_INFO("====particles before update======");
@@ -403,7 +337,7 @@ void ParticleFilter::ObserveLaser(const vector<float>& ranges,
   float min_move_dist = 0.0;
   double w_max = 0.0;
   int i = 0;
-  for (auto& particle : particles_){
+  for (auto& particle : particles_) {
     if ((particle.prev_update_loc - particle.loc).norm() >= min_move_dist) {
       ROS_INFO("Updating particle %d", i);
       Update(ranges, range_min, range_max, angle_min, angle_max, &particle, &observed_scan, num_ranges);
@@ -453,11 +387,9 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
                              const float odom_angle) {
 
   UpdateOdometry(odom_loc, odom_angle);
-
-  // here we will use motion model to predict location of particle at next time step
-  //float_t velocity_sign = ();
   for (auto& particle : particles_) {
-    particle.model_movement(odom_vel2f_, odom_vel_, odom_omega_, prev_odom_angle_ ,del_time_, rng_, CONFIG_k1, CONFIG_k2, CONFIG_k3, CONFIG_k4);
+    particle.model_movement(odom_vel2f_, odom_vel_, odom_omega_, prev_odom_angle_, 
+                            del_time_, rng_, CONFIG_k1, CONFIG_k2, CONFIG_k3, CONFIG_k4);
   }
 }
 
@@ -472,43 +404,46 @@ void ParticleFilter::Initialize(const std::string& map_file,
 
   // Initialize the particles of size num_particles
   particles_ = std::vector<Particle>(FLAGS_num_particles);
+  // Set the number of particles being used in the simulation.
+  num_particles_ = (int32_t)FLAGS_num_particles;
+
+  // Initialize the objects that are solely depedent on the num_particles.
+  particles_ = std::vector<Particle>(num_particles_);
+  resampled_particles_ = std::vector<Particle>(num_particles_);
+  weight_bins_ = std::vector<WeightBin>(num_particles_);
 
   // Create randomly distributed particles around (init_x, init_y).
-  for (int i = 0; i < int(particles_.size()); i++){
-    float x = rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
-    float y = rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
-    float r = rng_.Gaussian(angle, CONFIG_init_r_stddev);
+  for (int32_t i = 0; i < num_particles_; i++) {
+    float_t x = rng_.Gaussian(loc.x(), CONFIG_init_loc_stddev);
+    float_t y = rng_.Gaussian(loc.y(), CONFIG_init_loc_stddev);
+    float_t r = rng_.Gaussian(angle, CONFIG_init_r_stddev);
 
     particles_[i].loc = Vector2f(x, y);
     particles_[i].angle = r;
-    particles_[i].weight = 1.0;
+    particles_[i].reset_weight();
     particles_[i].prev_update_loc = Vector2f(x, y);
   }
   
 }
 
-void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr, 
-                                 float* angle_ptr) const {
+void ParticleFilter::GetLocation(Eigen::Vector2f* loc_ptr, float* angle_ptr) const {
   Vector2f& loc = *loc_ptr;
   float& angle = *angle_ptr;
   // Compute the best estimate of the robot's location based on the current set
   // of particles. The computed values must be set to the `loc` and `angle`
   // variables to return them. Modify the following assignments:
 
-  int N = particles_.size();
-  float sum_x = 0;
-  float sum_y = 0;
-  float sum_cos_angle = 0;
-  float sum_sin_angle = 0;
-  for (auto& particle : particles_){
+  float sum_x, sum_y, sum_cos_angle, sum_sin_angle;
+  sum_x = sum_y = sum_cos_angle = sum_sin_angle = 0;
+  for (const auto& particle : particles_) {
     sum_x += particle.loc.x();
     sum_y += particle.loc.y();
     sum_cos_angle += cos(particle.angle);
     sum_sin_angle += sin(particle.angle);
   }
 
-  loc = Vector2f(sum_x / N, sum_y / N);
-  angle = atan2(sum_sin_angle / N, sum_cos_angle / N);
+  loc = Vector2f(sum_x / num_particles_, sum_y / num_particles_);
+  angle = atan2(sum_sin_angle / num_particles_, sum_cos_angle / num_particles_);
 }
 
 
