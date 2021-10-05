@@ -11,7 +11,7 @@ class Particle {
     
         Eigen::Vector2f loc;
         float_t angle;
-        double weight;
+        double weight = 1.0;
         Eigen::Vector2f prev_update_loc;
 
         //Functions to change this function's location and angle

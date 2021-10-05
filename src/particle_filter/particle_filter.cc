@@ -163,28 +163,36 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
   const float max_ray_range = 10.0;
   const float angle_inc = (angle_max - angle_min) / (num_rays / ray_interval);
 
+  float current_angle;
+  Vector2f ray_start_point;
+  Vector2f ray_end_point;
+  line2f current_ray;
+  Vector2f min_intersection_point;
+  float min_intersection_dist = max_ray_range; 
+
   // iterate over each ray from laser
   for (int32_t i = 0; i < num_rays; i += ray_interval) {
-    float current_angle = i * angle_inc + angle_min + angle;
+    current_angle = i * angle_inc + angle_min + angle;
     // The laser vector starts at the laster scanner which is kLaserLoc offest from the
     // base link of the robot.
-    Vector2f ray_start_point = Vector2f(loc.x() + kLaserLoc.x(), 
+    ray_start_point = Vector2f(loc.x() + kLaserLoc.x(), 
                                         loc.y() + kLaserLoc.y());
     // The default end of the ray is the max length of the LIDAR.
-    Vector2f ray_end_point = ray_start_point + 
+    ray_end_point = ray_start_point + 
                     (Vector2f(cos(current_angle), sin(current_angle)) * max_ray_range);
     // Create the ray line2f object
-    line2f current_ray(ray_start_point.x(), ray_start_point.y(),
+    current_ray = line2f(ray_start_point.x(), ray_start_point.y(),
                       ray_end_point.x(), ray_end_point.y());
 
-    float min_intersection_dist = max_ray_range; 
-    Vector2f min_intersection_point = current_ray.p1;
+    min_intersection_dist = max_ray_range; 
+    min_intersection_point = current_ray.p1;
 
     // iterate over each line in the map and return shortest distance to interection point
     int32_t num_map_lines = (int32_t)map_.lines.size();
+    Vector2f intersection_point; 
+    bool intersects;
     for (int32_t j = 0; j < num_map_lines; j++) {
-      Vector2f intersection_point; 
-      bool intersects = map_.lines[j].Intersection(current_ray, &intersection_point);
+      intersects = map_.lines[j].Intersection(current_ray, &intersection_point);
 
       if (intersects) {
         float intersection_dist = (intersection_point - ray_start_point).norm(); 
@@ -252,11 +260,10 @@ void ParticleFilter::Update(const std::vector<float>& ranges,
       continue;
     }
     log_ol = log(ol);
-    ROS_INFO(" [ray %d]: pred_s_t_i = %f, s_t_i = %f, ol = %f, log_ol = %f", i, pred_s_t_i, s_t_i, ol, log_ol);
+    //ROS_INFO(" [ray %d]: pred_s_t_i = %f, s_t_i = %f, ol = %f, log_ol = %f", i, pred_s_t_i, s_t_i, ol, log_ol);
     p_s_t += log_ol;
   }
-  ROS_INFO(" === p_s_t = %f", p_s_t);
-  ROS_INFO(" === weight = %f", exp(p_s_t));
+  //ROS_INFO(" === p_s_t = %f", p_s_t);
   p_ptr->weight = exp(p_s_t);
 
 }
@@ -273,24 +280,25 @@ void ParticleFilter::Resample() {
     start_width = weight_bins_[i].upper_bound;
   }
 
-  PrintBins(weight_bins_);
+  //PrintBins(weight_bins_);
   
   // Resample with low variance
-  float_t r = rng_.UniformRandom(0, 1 / num_particles_);
+  float_t r = rng_.UniformRandom(0, (1.0 / num_particles_));
   float_t c = particles_[0].weight;
   int i = 0;
 
   for (int32_t m = 0; m < num_particles_; m++) {
-    float_t u = r + m * (1.0 / num_particles_);
+    float_t u = r + (float_t)m * (1.0 / num_particles_);
     while (c < u) {
       i += 1;
       c += particles_[i].weight;
     }
     resampled_particles_[m] = particles_[i];
+    resampled_particles_[m].reset_weight();
   }
 
   // Swap the newly sampled particles with the original (avoiding copy)
-  std::swap(particles_, resampled_particles_);
+  particles_.swap(resampled_particles_);
 
 }
 
@@ -301,43 +309,38 @@ void ParticleFilter::ObserveLaser(const std::vector<float>& ranges,
                                   float angle_max) {
 
   // Alternate method
-  ROS_INFO("====particles before update======");
-  PrintParticles();
+  //ROS_INFO("====particles before update======");
+  //PrintParticles();
   float min_move_dist = 0.0;
-  double w_max = 0.0;
-  int i = 0;
+  double w_sum = 0.0;
   for (auto& particle : particles_) {
     if ((particle.prev_update_loc - particle.loc).norm() >= min_move_dist) {
-      ROS_INFO("Updating particle %d", i);
+      //ROS_INFO("Updating particle %d", i);
       Update(ranges, range_min, range_max, angle_min, angle_max, &particle, int32_t(10));
       particle.prev_update_loc = particle.loc;
-    } else{
-      ROS_INFO("article %d not updated", i);
+      w_sum += particle.weight;
     }
-    i++;
   }
   
-  ROS_INFO("====particles after update======");
+  //ROS_INFO("====particles after update======");
   PrintParticles();
   
-  w_max = GetMaxWeight();
-  ROS_INFO("w_max = %f", w_max);
 
-  if (w_max != 0){
+  if (w_sum != 0){
     for (auto& particle : particles_){
-      particle.normalize_weight(w_max);
+      particle.normalize_weight(w_sum);
     }
-    ROS_INFO("====particles after normalization======");
-    PrintParticles();
+    //ROS_INFO("====particles after normalization======");
+    //PrintParticles();
     if (rng_.UniformRandom(0.0, 1.0) <= 0.95) {
       Resample();
-      ROS_INFO("====particles after resampling======");
-      PrintParticles();
+      //ROS_INFO("====particles after resampling======");
+      //PrintParticles();
     } else{
-      ROS_INFO("====particles NOT resampled======");
+      //ROS_INFO("====particles NOT resampled======");
     }
   } else{
-    ROS_INFO("====********w_max = 0 ??*******======");
+    //ROS_INFO("====********w_max = 0 ??*******======");
   }
   
   
@@ -346,7 +349,7 @@ void ParticleFilter::ObserveLaser(const std::vector<float>& ranges,
 double ParticleFilter::GetMaxWeight() {
   double result = 0;
   for (auto& particle : particles_) {
-    result = particle.weight > result ? particle.weight : result;
+    result += particle.weight;
   }
   return result;
 }
