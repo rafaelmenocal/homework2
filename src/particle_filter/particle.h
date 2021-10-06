@@ -34,6 +34,19 @@ class Particle {
                             float_t k2,
                             float_t k3,
                             float_t k4);
+        
+        void model_movement(Eigen::Vector2f odom_velocity,
+                            float_t speed,
+                            float_t ang_vel,
+                            float_t theta,
+                            float_t del_time,
+                            util_random::Random& rng,
+                            Eigen::Vector2f del_odom_loc,
+                            float_t del_odom_angle,
+                            float_t k1,
+                            float_t k2,
+                            float_t k3,
+                            float_t k4);
 
 };
 

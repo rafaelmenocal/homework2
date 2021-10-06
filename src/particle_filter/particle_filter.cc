@@ -86,6 +86,7 @@ void ParticleFilter::UpdateOdometry(const Vector2f& odom_loc,
   curr_odom_angle_ = odom_angle;
   curr_time_ = ros::Time::now().toSec();
   del_time_ = curr_time_ - prev_time_;
+  del_odom_loc_ = curr_odom_loc_ - prev_odom_loc_;
   odom_vel2f_ = GetOdomVel2f();
   odom_accel2f_ = GetOdomAccel2f();
   odom_vel_ = Vel2fToVel();
@@ -100,6 +101,7 @@ void ParticleFilter::UpdateOdometry(const Vector2f& odom_loc,
 
   ROS_INFO("prev_odom_loc_ = (%f, %f)", prev_odom_loc_.x(), prev_odom_loc_.y());
   ROS_INFO("curr_odom_loc_ = (%f, %f)", curr_odom_loc_.x(), curr_odom_loc_.y());
+  ROS_INFO("del_odom_loc_ = (%f, %f)", del_odom_loc_.x(), del_odom_loc_.y());
 
   ROS_INFO("prev_odom_vel2f_ = (%f, %f)", prev_odom_vel2f_.x(), prev_odom_vel2f_.y());
   ROS_INFO("odom_vel2f_ = (%f, %f)", odom_vel2f_.x(), odom_vel2f_.y());
@@ -130,6 +132,7 @@ ParticleFilter::ParticleFilter() :
     curr_time_(0),
     prev_time_(0),
     del_time_(0),
+    del_odom_loc_(0,0),
     prev_odom_vel2f_(0, 0),
     odom_vel2f_(0, 0),
     odom_accel2f_(0, 0),
@@ -308,9 +311,6 @@ void ParticleFilter::ObserveLaser(const std::vector<float>& ranges,
                                   float angle_min,
                                   float angle_max) {
 
-  // Alternate method
-  //ROS_INFO("====particles before update======");
-  //PrintParticles();
   float min_move_dist = 0.0;
   double w_sum = 0.0;
   for (auto& particle : particles_) {
@@ -325,7 +325,6 @@ void ParticleFilter::ObserveLaser(const std::vector<float>& ranges,
   //ROS_INFO("====particles after update======");
   PrintParticles();
   
-
   if (w_sum != 0){
     for (auto& particle : particles_){
       particle.normalize_weight(w_sum);
@@ -361,7 +360,9 @@ void ParticleFilter::Predict(const Vector2f& odom_loc,
   UpdateOdometry(odom_loc, odom_angle);
   for (auto& particle : particles_) {
     particle.model_movement(odom_vel2f_, odom_vel_, odom_omega_, prev_odom_angle_, 
-                            del_time_, rng_, CONFIG_k1, CONFIG_k2, CONFIG_k3, CONFIG_k4);
+                            del_time_, rng_, del_odom_loc_, del_odom_angle_, CONFIG_k1, CONFIG_k2, CONFIG_k3, CONFIG_k4);
+    // particle.model_movement(odom_vel2f_, odom_vel_, odom_omega_, prev_odom_angle_, 
+    //                         del_time_, rng_, CONFIG_k1, CONFIG_k2, CONFIG_k3, CONFIG_k4);
   }
 }
 
