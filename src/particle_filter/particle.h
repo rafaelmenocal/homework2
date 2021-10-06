@@ -30,10 +30,13 @@ class Particle {
                             float_t theta,
                             float_t del_time,
                             util_random::Random& rng,
+                            Eigen::Vector2f del_odom_loc_,
+                            float_t del_odom_angle_,
                             float_t k1,
                             float_t k2,
                             float_t k3,
                             float_t k4);
+
 
 };
 

@@ -140,6 +140,7 @@ class ParticleFilter {
     double curr_time_;
     double prev_time_;
     double del_time_;
+    Eigen::Vector2f del_odom_loc_;
     
     Eigen::Vector2f prev_odom_vel2f_;
     Eigen::Vector2f odom_vel2f_;
