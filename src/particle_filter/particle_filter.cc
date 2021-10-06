@@ -43,7 +43,7 @@ using Eigen::Vector2f;
 using Eigen::Vector2i;
 using vector_map::VectorMap;
 
-DEFINE_double(num_particles, 50, "Number of particles");
+DEFINE_double(num_particles, 150, "Number of particles");
 double current_time;
 const Vector2f kLaserLoc(0.2, 0);
 
