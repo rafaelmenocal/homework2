@@ -149,6 +149,9 @@ class ParticleFilter {
     float del_odom_angle_;
     float odom_omega_;
 
+    int sample_counter_ = 0;
+    int sample_rate_ = 4;
+
     // A few small helper functions.
     inline float_t Vel2fToVel() const {
       return sqrt(pow(odom_vel2f_.x(), 2) + pow(odom_vel2f_.y(), 2));

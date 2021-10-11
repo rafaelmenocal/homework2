@@ -153,7 +153,7 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
                                             std::vector<Vector2f>* scan_ptr,
                                             int32_t ray_interval) {
   std::vector<Vector2f>& scan = *scan_ptr;
-  scan.resize((int)(1 + (num_rays / ray_interval)));
+  scan.resize((int)(num_rays / ray_interval));
   // Compute what the predicted point cloud would be, if the car was at the pose
   // loc, angle, with the sensor characteristics defined by the provided
   // parameters.
@@ -171,12 +171,13 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
   float min_intersection_dist = max_ray_range; 
 
   // iterate over each ray from laser
-  for (int32_t i = 0; i < num_rays; i += ray_interval) {
-    current_angle = i * angle_inc + angle_min + angle;
-    // The laser vector starts at the laster scanner which is kLaserLoc offest from the
+  for (int32_t i = 0; i < num_rays / ray_interval; i++) {
+    current_angle = (float)i * angle_inc + angle_min + angle;
+
+    // The laser vector starts at the laser scanner which is kLaserLoc offest from the
     // base link of the robot.
-    ray_start_point = Vector2f(loc.x() + kLaserLoc.x(), 
-                                        loc.y() + kLaserLoc.y());
+    ray_start_point = Vector2f(loc.x() + kLaserLoc.x() * cos(angle), 
+                                        loc.y() +  kLaserLoc.x() * sin(angle));
     // The default end of the ray is the max length of the LIDAR.
     ray_end_point = ray_start_point + 
                     (Vector2f(cos(current_angle), sin(current_angle)) * max_ray_range);
@@ -196,13 +197,14 @@ void ParticleFilter::GetPredictedPointCloud(const Vector2f& loc,
 
       if (intersects) {
         float intersection_dist = (intersection_point - ray_start_point).norm(); 
-        if (intersection_dist <= min_intersection_dist){
+        if (intersection_dist <= min_intersection_dist && intersection_dist > 0.0){
           min_intersection_dist = intersection_dist;
           min_intersection_point = intersection_point; // world frame
         }
       }
     }
-    scan[int(i / ray_interval)] = min_intersection_point;
+    scan[i] = min_intersection_point;
+    //ROS_INFO("%d, %d, %ld", num_rays, int(i / ray_interval), scan.size());
   }
   
 }
@@ -252,7 +254,7 @@ void ParticleFilter::Update(const std::vector<float>& ranges,
   // for each predicted ray, compare to corresponding observed ray
   int32_t num_predicted_rays = (int32_t)pred_scan.size();
   for (int32_t i = 0; i < num_predicted_rays; i++) {
-    double pred_s_t_i = (p_ptr->loc + kLaserLoc - pred_scan[i]).norm(); 
+    double pred_s_t_i = (p_ptr->loc - pred_scan[i]).norm(); 
     double s_t_i = ranges[i * ray_interval];
     double ol = Observe_Likelihood(s_t_i, pred_s_t_i, range_min, range_max, CONFIG_d_short, CONFIG_d_long, CONFIG_ol_sigma, CONFIG_gamma);
     double log_ol;
@@ -315,7 +317,7 @@ void ParticleFilter::ObserveLaser(const std::vector<float>& ranges,
   double w_sum = 0.0;
   for (auto& particle : particles_) {
     if ((particle.prev_update_loc - particle.loc).norm() >= min_move_dist) {
-      //ROS_INFO("Updating particle %d", i);
+      //ROS_INFO("Updating particle %f", particle.angle);
       Update(ranges, range_min, range_max, angle_min, angle_max, &particle, int32_t(10));
       particle.prev_update_loc = particle.loc;
       w_sum += particle.weight;
@@ -323,7 +325,7 @@ void ParticleFilter::ObserveLaser(const std::vector<float>& ranges,
   }
   
   //ROS_INFO("====particles after update======");
-  PrintParticles();
+  //PrintParticles();
   
 
   if (w_sum != 0){
@@ -332,12 +334,11 @@ void ParticleFilter::ObserveLaser(const std::vector<float>& ranges,
     }
     //ROS_INFO("====particles after normalization======");
     //PrintParticles();
-    if (rng_.UniformRandom(0.0, 1.0) <= 0.95) {
+    if (sample_counter_ == sample_rate_) {
       Resample();
-      //ROS_INFO("====particles after resampling======");
-      //PrintParticles();
+      sample_counter_ = 0;
     } else{
-      //ROS_INFO("====particles NOT resampled======");
+      sample_counter_ += 1;
     }
   } else{
     //ROS_INFO("====********w_max = 0 ??*******======");
