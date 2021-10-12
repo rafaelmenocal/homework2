@@ -18,128 +18,159 @@
 \author  Joydeep Biswas, (C) 2018
 */
 //========================================================================
+#ifndef __SRC_PARTICLE_FILTER_PARTICLE_FILTER_H__
+#define __SRC_PARTICLE_FILTER_PARTICLE_FILTER_H__
+
 
 #include <algorithm>
 #include <vector>
 
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
+
 #include "shared/math/line2d.h"
 #include "shared/util/random.h"
 #include "vector_map/vector_map.h"
+
 #include "particle.h"
 
-#ifndef SRC_PARTICLE_FILTER_H_
-#define SRC_PARTICLE_FILTER_H_
 
 namespace particle_filter {
 
-// struct Particle {
-//   Eigen::Vector2f loc;
-//   float angle;
-//   double weight;
-// };
+
+struct WeightBin {
+  float_t lower_bound;
+  float_t upper_bound;
+};
+
 
 class ParticleFilter {
- public:
-  // Default Constructor.
-   ParticleFilter();
+  public:
+    // Default Constructor.
+    ParticleFilter();
 
-  // Observe a new laser scan.
-  void ObserveLaser(const std::vector<float>& ranges,
-                    float range_min,
-                    float range_max,
-                    float angle_min,
-                    float angle_max);
+    // Observe a new laser scan.
+    void ObserveLaser(const std::vector<float>& ranges,
+                      float range_min,
+                      float range_max,
+                      float angle_min,
+                      float angle_max);
 
-  // Predict particle motion based on odometry.
-  void Predict(const Eigen::Vector2f& odom_loc,
-                       const float odom_angle);
+    // Predict particle motion based on odometry.
+    void Predict(const Eigen::Vector2f& odom_loc,
+                        const float odom_angle);
 
-  // Initialize the robot location.
-  void Initialize(const std::string& map_file,
-                  const Eigen::Vector2f& loc,
-                  const float angle);
+    // Initialize the robot location.
+    void Initialize(const std::string& map_file,
+                    const Eigen::Vector2f& loc,
+                    const float angle);
 
-  // Called to update variables based on odometry
-  void UpdateOdometry(const Eigen::Vector2f& odom_loc,
-                                      const float odom_angle);
+    // Called to update variables based on odometry
+    void UpdateOdometry(const Eigen::Vector2f& odom_loc,
+                                        const float odom_angle);
 
-  // Return the list of particles.
-  void GetParticles(std::vector<Particle>* particles) const;
+    // Return the list of particles.
+    void GetParticles(std::vector<Particle>* particles) const;
 
-  // Get robot's current location.
-  void GetLocation(Eigen::Vector2f* loc, float* angle) const;
+    /*
+    * Loop over all the particles and get the average position and angle.
+    * This is deemed the orientiation of the robot by the particles.
+    * 
+    * @param loc: the vector to fill with the average x and y location
+    * @param angle: the average angle of all the particles.
+    */
+    void GetLocation(Eigen::Vector2f* loc, float* angle) const;
 
-  // Update particle weight based on laser.
-  void Update(const std::vector<float>& ranges,
-              float range_min,
-              float range_max,
-              float angle_min,
-              float angle_max,
-              Particle* p,
-              std::vector<Eigen::Vector2f>* obs_scan_ptr,
-              float num_ranges);
+    // Update particle weight based on laser.
+    void Update(const std::vector<float>& ranges,
+                float range_min,
+                float range_max,
+                float angle_min,
+                float angle_max,
+                Particle* p,
+                int32_t ray_interval);
 
-  // Resample particles.
-  void Resample();
+    // Resample particles.
+    void Resample();
 
-  // Print particles
-  void PrintParticles();
+    // Print particles
+    void PrintParticles();
 
-  // Get Max Weight of all particles
-  double GetMaxWeight();
+    // Get Max Weight of all particles
+    double GetMaxWeight();
 
-  // For debugging: get predicted point cloud from current location.
-  void GetPredictedPointCloud(const Eigen::Vector2f& loc,
-                              const float angle,
-                              float num_ranges,
-                              float range_min,
-                              float range_max,
-                              float angle_min,
-                              float angle_max,
-                              std::vector<Eigen::Vector2f>* scan);
+    // For debugging: get predicted point cloud from current location.
+    void GetPredictedPointCloud(const Eigen::Vector2f& loc,
+                                const float angle,
+                                int32_t num_rays,
+                                float range_min,
+                                float range_max,
+                                float angle_min,
+                                float angle_max,
+                                std::vector<Eigen::Vector2f>* scan,
+                                int32_t ray_interval);
 
-void GetObservedPointCloud(//const Eigen::Vector2f& loc,
-                           //const float angle,
-                           const std::vector<float>& ranges,
-                           float num_ranges,
-                           float range_min,
-                           float range_max,
-                           float angle_min,
-                           float angle_max,
-                           std::vector<Eigen::Vector2f>* obs_scan_ptr);
- private:
+  private:
 
-  // List of particles being tracked.
-  std::vector<Particle> particles_;
+    // List of particles being tracked.
+    std::vector<Particle> particles_;
 
-  // Map of the environment.
-  vector_map::VectorMap map_;
+    // Keep an extra structure for managing the resampled particles
+    std::vector<Particle> resampled_particles_;
 
-  // Random number generator.
-  util_random::Random rng_;
+    // Bounds on the weight bins per particle
+    std::vector<WeightBin> weight_bins_;
 
-  // Previous odometry-reported locations.
-  Eigen::Vector2f prev_odom_loc_;
-  float prev_odom_angle_;
-  bool odom_initialized_;
+    // number of particles in the simulation. Supplied via command line.
+    int32_t num_particles_;
 
-  Eigen::Vector2f curr_odom_loc_;
-  float curr_odom_angle_;
-  double curr_time_;
-  double prev_time_;
-  double del_time_;
-  
-  Eigen::Vector2f prev_odom_vel2f_;
-  Eigen::Vector2f odom_vel2f_;
-  Eigen::Vector2f odom_accel2f_;
-  float odom_vel_;
-  float odom_accel_;
-  float del_odom_angle_;
-  float odom_omega_;
+    // Map of the environment.
+    vector_map::VectorMap map_;
+
+    // Random number generator.
+    util_random::Random rng_;
+
+    // Previous odometry-reported locations.
+    Eigen::Vector2f prev_odom_loc_;
+    float prev_odom_angle_;
+    bool odom_initialized_;
+
+    Eigen::Vector2f curr_odom_loc_;
+    float curr_odom_angle_;
+    double curr_time_;
+    double prev_time_;
+    double del_time_;
+    
+    Eigen::Vector2f prev_odom_vel2f_;
+    Eigen::Vector2f odom_vel2f_;
+    Eigen::Vector2f odom_accel2f_;
+    float odom_vel_;
+    float odom_accel_;
+    float del_odom_angle_;
+    float odom_omega_;
+
+    int sample_counter_ = 0;
+    int sample_rate_ = 4;
+
+    // A few small helper functions.
+    inline float_t Vel2fToVel() const {
+      return sqrt(pow(odom_vel2f_.x(), 2) + pow(odom_vel2f_.y(), 2));
+    };
+
+    inline float_t Accel2fToAccel() const {
+      return sqrt(pow(odom_accel2f_.x(), 2) + pow(odom_accel2f_.y(), 2));
+    }
+
+    inline Eigen::Vector2f GetOdomVel2f() const {
+      return (1.0 / del_time_) * 
+        Eigen::Vector2f(curr_odom_loc_.x() - prev_odom_loc_.x(), curr_odom_loc_.y() - prev_odom_loc_.y());
+    }
+
+    inline Eigen::Vector2f GetOdomAccel2f() const {
+      return (prev_odom_vel2f_ - odom_vel2f_) * del_time_;
+  }
 
 };
-}  // namespace slam
+}  // namespace particle_filter
 
-#endif   // SRC_PARTICLE_FILTER_H_
+#endif // __SRC_PARTICLE_FILTER_PARTICLE_FILTER_H__
